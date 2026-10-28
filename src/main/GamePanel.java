@@ -12,6 +12,11 @@ import javax.swing.JPanel;
 
 import entities.Player;
 import entities.Dragon;
+import entities.Monster;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Random;
 import tile.TileManager;
 import Object.SuperObject;
 
@@ -49,6 +54,12 @@ public class GamePanel extends JPanel implements Runnable {
     public AssetSetter aSetter = new AssetSetter(this);
     public SuperObject obj[] = new SuperObject[10];
     public Dragon dragon = new Dragon(this);
+    public final List<Monster> monsters = new ArrayList<>();
+    private static final int MAX_MONSTERS = 10;
+    private static final int MONSTER_RESPAWN_DELAY = 90;
+    private int monsterRespawnCounter = MONSTER_RESPAWN_DELAY;
+    private int nextSpawnIndex;
+    private final Random random = new Random();
     
     
 
@@ -63,8 +74,11 @@ public class GamePanel extends JPanel implements Runnable {
         this.setDoubleBuffered(true);
 
         this.addKeyListener(keyH);
+        this.addFocusListener(keyH);
+        this.addMouseListener(keyH);
 
         this.setFocusable(true);
+        spawnMonsters();
     }
 
     public void startGameThread() {
@@ -118,6 +132,50 @@ public class GamePanel extends JPanel implements Runnable {
 
         player.update();
         dragon.update();
+        Iterator<Monster> iterator = monsters.iterator();
+        while (iterator.hasNext()) {
+            Monster monster = iterator.next();
+            monster.update();
+            if (monster.isDead()) {
+                iterator.remove();
+            }
+        }
+        replenishMonsters();
+    }
+
+    private void spawnMonsters() {
+        while (monsters.size() < MAX_MONSTERS) {
+            addMonsterAtSpawnPoint();
+        }
+    }
+
+    private void replenishMonsters() {
+        if (monsters.size() >= MAX_MONSTERS) {
+            monsterRespawnCounter = MONSTER_RESPAWN_DELAY;
+            return;
+        }
+
+        monsterRespawnCounter--;
+        if (monsterRespawnCounter <= 0) {
+            addMonsterAtSpawnPoint();
+            monsterRespawnCounter = MONSTER_RESPAWN_DELAY;
+        }
+    }
+
+    private void addMonsterAtSpawnPoint() {
+        int[][] spawnTiles = {
+                {43, 26}, {52, 26}, {43, 34}, {54, 35},
+                {20, 18}, {28, 22}, {35, 40}, {58, 48},
+                {66, 62}, {32, 72}
+        };
+        int[] spawn = spawnTiles[nextSpawnIndex % spawnTiles.length];
+        nextSpawnIndex++;
+
+        if (random.nextBoolean()) {
+            int offset = random.nextInt(3) - 1;
+            spawn = new int[] {spawn[0] + offset, spawn[1]};
+        }
+        monsters.add(new Monster(this, spawn[0] * tileSize, spawn[1] * tileSize));
     }
 
     @Override
@@ -135,6 +193,9 @@ public class GamePanel extends JPanel implements Runnable {
         	}
      }
         dragon.draw(g2);
+        for (Monster monster : monsters) {
+            monster.draw(g2);
+        }
 
         player.draw(g2);
 
