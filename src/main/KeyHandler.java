@@ -5,14 +5,27 @@ import java.awt.event.KeyListener;
 
 public class KeyHandler implements KeyListener {
 
-    public boolean upPressed;
-    public boolean downPressed;
-    public boolean leftPressed;
-    public boolean rightPressed;
+    // ── Movement keys ─────────────────────────────────────────────────────────
+    public volatile boolean upPressed;
+    public volatile boolean downPressed;
+    public volatile boolean leftPressed;
+    public volatile boolean rightPressed;
+
+    // ── Inventory / UI keys ───────────────────────────────────────────────────
+    // volatile: written on the EDT (key events), read on the game thread.
+    public volatile boolean inventoryTogglePressed;   // TAB
+    public volatile boolean inventoryClosePressed;    // ESC
+
+    // ── Hotbar number key (1–9), -1 = none pressed ───────────────────────────
+    public volatile int hotbarKeyPressed = -1;
+
+    // ── Attack keys ───────────────────────────────────────────────────────────
+    public volatile boolean attackPressed;    // SPACE bar
+    // Left mouse click attack is handled separately via MouseListener in GamePanel
 
     @Override
     public void keyTyped(KeyEvent e) {
-
+        // intentionally empty
     }
 
     @Override
@@ -20,20 +33,24 @@ public class KeyHandler implements KeyListener {
 
         int code = e.getKeyCode();
 
-        if (code == KeyEvent.VK_W) {
-            upPressed = true;
-        }
+        // ── Movement ──────────────────────────────────────────────────────────
+        if (code == KeyEvent.VK_W) upPressed    = true;
+        if (code == KeyEvent.VK_S) downPressed  = true;
+        if (code == KeyEvent.VK_A) leftPressed  = true;
+        if (code == KeyEvent.VK_D) rightPressed = true;
 
-        if (code == KeyEvent.VK_S) {
-            downPressed = true;
-        }
+        // ── Inventory ─────────────────────────────────────────────────────────
+        // NOTE: TAB only reaches here when setFocusTraversalKeysEnabled(false)
+        //       is called on the GamePanel (done in GamePanel constructor).
+        if (code == KeyEvent.VK_TAB)    inventoryTogglePressed = true;
+        if (code == KeyEvent.VK_ESCAPE) inventoryClosePressed  = true;
 
-        if (code == KeyEvent.VK_A) {
-            leftPressed = true;
-        }
+        // ── Attack ────────────────────────────────────────────────────────────
+        if (code == KeyEvent.VK_SPACE)  attackPressed = true;
 
-        if (code == KeyEvent.VK_D) {
-            rightPressed = true;
+        // ── Hotbar 1–9 ────────────────────────────────────────────────────────
+        if (code >= KeyEvent.VK_1 && code <= KeyEvent.VK_9) {
+            hotbarKeyPressed = code - KeyEvent.VK_0; // converts to 1–9
         }
     }
 
@@ -42,20 +59,13 @@ public class KeyHandler implements KeyListener {
 
         int code = e.getKeyCode();
 
-        if (code == KeyEvent.VK_W) {
-            upPressed = false;
-        }
+        // ── Movement ──────────────────────────────────────────────────────────
+        if (code == KeyEvent.VK_W) upPressed    = false;
+        if (code == KeyEvent.VK_S) downPressed  = false;
+        if (code == KeyEvent.VK_A) leftPressed  = false;
+        if (code == KeyEvent.VK_D) rightPressed = false;
 
-        if (code == KeyEvent.VK_S) {
-            downPressed = false;
-        }
-
-        if (code == KeyEvent.VK_A) {
-            leftPressed = false;
-        }
-
-        if (code == KeyEvent.VK_D) {
-            rightPressed = false;
-        }
+        // ── Attack (reset on release so next press fires again) ───────────────
+        if (code == KeyEvent.VK_SPACE) attackPressed = false;
     }
 }
