@@ -1,0 +1,40 @@
+# ================================================================
+# DEAD_END Level 1 — The Forgotten Kingdom (LibGDX, 50x50)
+# ================================================================
+
+LEVEL_ID       1
+LEVEL_NAME     The Forgotten Kingdom
+MAP_WIDTH      50
+MAP_HEIGHT     50
+TILE_SIZE      48
+
+PLAYER_SPAWN   25  42
+
+SCORE_THRESHOLD  0
+NEXT_LEVEL       2
+
+# --- Named locations ---
+LOCATION  "Ancient Forest"          0   0  10  18
+LOCATION  "Forgotten Village"       9  22  15  13
+LOCATION  "Cemetery"               38   7  10  10
+LOCATION  "Hospital"                1  10   8   7
+LOCATION  "Stone Bridge"           21  18   7   5
+LOCATION  "Crystal Grove"          36   5   9   8
+LOCATION  "Old Shrine"             24  11   9   8
+LOCATION  "Safehouse"               2  33   7   6
+LOCATION  "Abandoned Homes"        32  27  11  11
+LOCATION  "Ruined Keep"            41   2   7   7
+LOCATION  "Level 2 Gate"           41   1   8   9
+
+# --- Enemy regions (centerCol centerRow radius maxCount respawnDelay) ---
+ENEMY_REGION    5  10   4  3  0
+ENEMY_REGION   40  10   4  3  0
+ENEMY_REGION   44   5   3  2  0
+ENEMY_REGION   16  24   5  3  0
+ENEMY_REGION   38  30   4  3  0
+
+# --- Object placements ---
+OBJECT  OBJ_HOUSE  11  24
+OBJECT  OBJ_HOUSE  15  24
+OBJECT  OBJ_HOUSE  11  29
+OBJECT  OBJ_HOUSE  16  30

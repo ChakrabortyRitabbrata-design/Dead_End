@@ -1,0 +1,24 @@
+// Root build.gradle — shared configuration for all subprojects
+
+buildscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+allprojects {
+    version = '1.0.0'
+    group   = 'deadend'
+
+    repositories {
+        mavenCentral()
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+    }
+}
+
+ext {
+    appName    = 'DeadEnd'
+    gdxVersion = '1.12.1'
+    javaVersion = JavaVersion.VERSION_17
+}

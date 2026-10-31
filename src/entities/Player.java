@@ -80,10 +80,17 @@ public class Player extends Entity {
     }
 
     public void setDefaultValues() {
-        worldX = gp.tileSize * 49 + gp.tileSize / 2;
-        worldY = gp.tileSize * 90;
+        // Try to read spawn position from map metadata; fall back to hard-coded safe default
+        if (gp.tileM != null && gp.tileM.currentMap != null) {
+            int[] spawn = gp.tileM.currentMap.playerSpawn;
+            worldX = spawn[0] * gp.tileSize;
+            worldY = spawn[1] * gp.tileSize;
+        } else {
+            worldX = gp.tileSize * 49;
+            worldY = gp.tileSize * 90;
+        }
         speed = 4;
-        direction = "up";
+        direction = "down";
     }
 
     public void getPlayerImages() {

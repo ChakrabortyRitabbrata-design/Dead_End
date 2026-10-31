@@ -29,6 +29,10 @@ public class Dragon {
     private float alpha = 0.0f;
     private double hoverAngle = 0;
 
+    // Death / defeat tracking — used by LevelManager to detect boss kill
+    public boolean isDead        = false;
+    private boolean deathNotified = false;
+
     // Size: 4x4 tiles (192x192 px)
     public final int dragonWidth;
     public final int dragonHeight;
@@ -55,6 +59,25 @@ public class Dragon {
         this.alpha = 0.0f;
 
         getDragonImages();
+    }
+
+    /**
+     * Resets the dragon to the underwater/dormant state at a new spawn position.
+     * Safe to call at runtime (e.g. on level transition).
+     *
+     * @param spawnCol tile column to hover over
+     * @param spawnRow tile row of the hover target
+     */
+    public void activate(int spawnCol, int spawnRow) {
+        this.worldX     = spawnCol * gp.tileSize;
+        this.targetY    = spawnRow * gp.tileSize;
+        this.submergedY = targetY + (gp.tileSize * 4);
+        this.worldY     = submergedY;
+        this.state      = STATE_UNDERWATER;
+        this.alpha      = 0.0f;
+        this.hoverAngle = 0;
+        this.isDead        = false;
+        this.deathNotified = false;
     }
 
     public void getDragonImages() {

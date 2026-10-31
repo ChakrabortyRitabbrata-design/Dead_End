@@ -1,0 +1,17 @@
+// core/build.gradle — platform-independent game logic and rendering
+
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = rootProject.ext.javaVersion
+    targetCompatibility = rootProject.ext.javaVersion
+}
+
+dependencies {
+    // LibGDX core (platform-independent)
+    api "com.badlogicgames.gdx:gdx:${rootProject.ext.gdxVersion}"
+}
+
+sourceSets.main.java.srcDirs = ['src/main/java']

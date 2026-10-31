@@ -1,0 +1,45 @@
+# ================================================================
+# DEAD_END Level 1 Metadata — The Forgotten Kingdom (65x65)
+# ================================================================
+
+LEVEL_ID       1
+LEVEL_NAME     The Forgotten Kingdom
+MAP_WIDTH      65
+MAP_HEIGHT     65
+TILE_SIZE      48
+
+# Player arrives at the southern open area on a dirt path
+PLAYER_SPAWN   32  58
+
+# Dragon: disabled on Level 1 until confirmed by team
+# BOSS_DRAGON  30  23
+
+SCORE_THRESHOLD  0
+NEXT_LEVEL       2
+
+# --- Named locations (col row width height) ---
+LOCATION  "Ancient Forest"          1   0  13  22
+LOCATION  "Forgotten Village"      13  30  18  16
+LOCATION  "Cemetery"               41   6  14  14
+LOCATION  "Hospital"                2  13  10   8
+LOCATION  "Stone Bridge"           27  21   8   5
+LOCATION  "Crystal Grove"          49  10  10   9
+LOCATION  "Old Shrine"             34  14   9   9
+LOCATION  "Safehouse"               3  45   9   7
+LOCATION  "Abandoned Homes"        43  36  14  13
+LOCATION  "Ruined Keep"            54   3  10  10
+LOCATION  "Level 2 Gate"           56   1   8   9
+
+# --- Enemy spawn regions (centerCol centerRow radius maxCount respawnDelay) ---
+ENEMY_REGION    6  10   5  3  0
+ENEMY_REGION   48  12   5  3  0
+ENEMY_REGION   57   8   4  3  0
+ENEMY_REGION   22  35   6  3  0
+ENEMY_REGION   50  41   5  3  0
+
+# --- Object placements (TypeName col row) ---
+# Forgotten Village houses
+OBJECT  OBJ_HOUSE  15  33
+OBJECT  OBJ_HOUSE  20  33
+OBJECT  OBJ_HOUSE  15  39
+OBJECT  OBJ_HOUSE  21  40

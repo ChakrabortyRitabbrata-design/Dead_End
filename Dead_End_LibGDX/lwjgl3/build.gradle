@@ -1,0 +1,44 @@
+// lwjgl3/build.gradle — LWJGL3 desktop launcher
+
+plugins {
+    id 'java-library'
+    id 'application'
+}
+
+java {
+    sourceCompatibility = rootProject.ext.javaVersion
+    targetCompatibility = rootProject.ext.javaVersion
+}
+
+application {
+    mainClass = 'deadend.lwjgl3.Lwjgl3Launcher'
+    // Required for LWJGL3 on macOS ARM / Intel
+    applicationDefaultJvmArgs = ['-XstartOnFirstThread']
+}
+
+dependencies {
+    implementation project(':core')
+
+    // LibGDX LWJGL3 backend
+    implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:${rootProject.ext.gdxVersion}"
+
+    // Native binaries — all platforms bundled for convenience
+    implementation "com.badlogicgames.gdx:gdx-platform:${rootProject.ext.gdxVersion}:natives-desktop"
+    implementation "com.badlogicgames.gdx:gdx-freetype:${rootProject.ext.gdxVersion}"
+    implementation "com.badlogicgames.gdx:gdx-freetype-platform:${rootProject.ext.gdxVersion}:natives-desktop"
+}
+
+sourceSets.main.java.srcDirs = ['src/main/java']
+
+// Make assets available to the desktop launcher
+tasks.named('run') {
+    workingDir = rootProject.file('assets')
+}
+
+jar {
+    // Fat jar for distribution
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest { attributes 'Main-Class': application.mainClass.get() }
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    archiveBaseName = 'DeadEnd-desktop'
+}
