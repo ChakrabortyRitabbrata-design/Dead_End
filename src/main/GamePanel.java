@@ -4,15 +4,16 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-//import java.awt.Image;
-//import java.awt.Toolkit;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Random;
 
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import javax.swing.JPanel;
 
 import entities.Player;
 import entities.Dragon;
+import entities.Monster;
 import inventory.Hotbar;
 import inventory.Inventory;
 import inventory.InventoryUI;
@@ -44,7 +45,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     int FPS = 60;
 
-    KeyHandler keyH = new KeyHandler();
+    public KeyHandler keyH = new KeyHandler();
 
     Thread gameThread;
 
@@ -54,6 +55,14 @@ public class GamePanel extends JPanel implements Runnable {
     public SuperObject       obj[]    = new SuperObject[10];
     public Dragon            dragon   = new Dragon(this);
 
+    // ── Monsters ──────────────────────────────────────────────────────────────
+    public final List<Monster> monsters = new ArrayList<>();
+    private static final int MAX_MONSTERS = 10;
+    private static final int MONSTER_RESPAWN_DELAY = 90;
+    private int monsterRespawnCounter = MONSTER_RESPAWN_DELAY;
+    private int nextSpawnIndex;
+    private final Random random = new Random();
+
     // ── Inventory System ──────────────────────────────────────────────────────
     public Inventory    inventory;
     public Hotbar       hotbar;
@@ -61,9 +70,8 @@ public class GamePanel extends JPanel implements Runnable {
 
     // ── Game State ────────────────────────────────────────────────────────────
     /**
-     * Simple two-state flag.
-     *   "PLAY"      – normal gameplay, player can move.
-     *   "INVENTORY" – inventory open, gameplay paused.
+     * "PLAY"      – normal gameplay, player and monsters update.
+     * "INVENTORY" – inventory open, gameplay paused.
      */
     public String gameState = "PLAY";
 
@@ -74,30 +82,22 @@ public class GamePanel extends JPanel implements Runnable {
         this.setPreferredSize(new Dimension(screenWidth, screenHeight));
         this.setBackground(Color.BLACK);
         this.setDoubleBuffered(true);
+
         this.addKeyListener(keyH);
+        this.addFocusListener(keyH);
+        this.addMouseListener(keyH);
+
         this.setFocusable(true);
 
-        // ── FIX: Disable Swing's built-in focus traversal so TAB key is
-        //         delivered to our KeyListener instead of cycling focus.
+        // ── Disable Swing's built-in focus traversal so TAB reaches KeyListener
         this.setFocusTraversalKeysEnabled(false);
 
-        // Build inventory objects (InventoryUI registers its own mouse listeners
-        // on this panel, so 'this' must be passed after the panel is constructed)
+        // ── Inventory Initialization ──────────────────────────────────────────
         inventory   = new Inventory();
         hotbar      = new Hotbar(inventory);
         inventoryUI = new InventoryUI(inventory, hotbar, this);
 
-        // ── Left-click → attack (when gameplay is active) ─────────────────────
-        this.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                requestFocusInWindow();   // keep keyboard focus
-                if (e.getButton() == MouseEvent.BUTTON1
-                        && gameState.equals("PLAY")) {
-                    player.requestAttack();
-                }
-            }
-        });
+        spawnMonsters();
     }
 
     // ── Game Thread ───────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ public class GamePanel extends JPanel implements Runnable {
 
         // ── TAB: toggle inventory ────────────────────────────────────────────
         if (keyH.inventoryTogglePressed) {
-            keyH.inventoryTogglePressed = false;   // consume
+            keyH.inventoryTogglePressed = false;
             if (gameState.equals("PLAY")) {
                 gameState = "INVENTORY";
                 inventoryUI.show();
@@ -153,24 +153,71 @@ public class GamePanel extends JPanel implements Runnable {
 
         // ── ESC: close inventory ──────────────────────────────────────────────
         if (keyH.inventoryClosePressed) {
-            keyH.inventoryClosePressed = false;    // consume
+            keyH.inventoryClosePressed = false;
             if (gameState.equals("INVENTORY")) {
                 gameState = "PLAY";
                 inventoryUI.hide();
             }
         }
 
-        // ── Hotbar number keys (work in both states) ──────────────────────────
+        // ── Hotbar number keys (1–9) ─────────────────────────────────────────
         if (keyH.hotbarKeyPressed > 0) {
             hotbar.selectByKeyNumber(keyH.hotbarKeyPressed);
-            keyH.hotbarKeyPressed = -1;            // consume
+            keyH.hotbarKeyPressed = -1;
         }
 
-        // ── Gameplay updates only when not in inventory ───────────────────────
+        // ── Gameplay updates only when playing (not in inventory) ─────────────
         if (gameState.equals("PLAY")) {
             player.update();
             dragon.update();
+
+            Iterator<Monster> iterator = monsters.iterator();
+            while (iterator.hasNext()) {
+                Monster monster = iterator.next();
+                monster.update();
+                if (monster.isDead()) {
+                    iterator.remove();
+                }
+            }
+            replenishMonsters();
         }
+    }
+
+    // ── Monster Spawning ──────────────────────────────────────────────────────
+
+    private void spawnMonsters() {
+        while (monsters.size() < MAX_MONSTERS) {
+            addMonsterAtSpawnPoint();
+        }
+    }
+
+    private void replenishMonsters() {
+        if (monsters.size() >= MAX_MONSTERS) {
+            monsterRespawnCounter = MONSTER_RESPAWN_DELAY;
+            return;
+        }
+
+        monsterRespawnCounter--;
+        if (monsterRespawnCounter <= 0) {
+            addMonsterAtSpawnPoint();
+            monsterRespawnCounter = MONSTER_RESPAWN_DELAY;
+        }
+    }
+
+    private void addMonsterAtSpawnPoint() {
+        int[][] spawnTiles = {
+                {43, 26}, {52, 26}, {43, 34}, {54, 35},
+                {20, 18}, {28, 22}, {35, 40}, {58, 48},
+                {66, 62}, {32, 72}
+        };
+        int[] spawn = spawnTiles[nextSpawnIndex % spawnTiles.length];
+        nextSpawnIndex++;
+
+        if (random.nextBoolean()) {
+            int offset = random.nextInt(3) - 1;
+            spawn = new int[] {spawn[0] + offset, spawn[1]};
+        }
+        monsters.add(new Monster(this, spawn[0] * tileSize, spawn[1] * tileSize));
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -181,17 +228,26 @@ public class GamePanel extends JPanel implements Runnable {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
 
-        // ── World ─────────────────────────────────────────────────────────────
+        // ── World tiles ───────────────────────────────────────────────────────
         tileM.draw(g2);
 
+        // ── Objects ───────────────────────────────────────────────────────────
         for (int i = 0; i < obj.length; i++) {
             if (obj[i] != null) obj[i].draw(g2, this);
         }
 
+        // ── Dragon Boss ───────────────────────────────────────────────────────
         dragon.draw(g2);
+
+        // ── Monsters ──────────────────────────────────────────────────────────
+        for (Monster monster : monsters) {
+            monster.draw(g2);
+        }
+
+        // ── Player ────────────────────────────────────────────────────────────
         player.draw(g2);
 
-        // ── HUD: hotbar always visible ────────────────────────────────────────
+        // ── HUD: hotbar always visible at bottom ──────────────────────────────
         inventoryUI.drawHotbar(g2, screenWidth, screenHeight);
 
         // ── Inventory overlay (only when open) ────────────────────────────────
