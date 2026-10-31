@@ -2,6 +2,8 @@ package entities;
 
 import main.GamePanel;
 import main.KeyHandler;
+import inventory.Item;
+import inventory.Weapon;
 
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -62,6 +64,9 @@ public class Player extends Entity {
     private int rollDistanceRemaining = 0;
     private String rollDirection = "down";
 
+    // ── Weapon Renderer & Equipment ───────────────────────────────────────────
+    private final WeaponRenderer weaponRenderer;
+
     private final BufferedImage[][][] combatFrames =
             new BufferedImage[DIRECTION_COUNT][ACTION_COUNT][];
 
@@ -73,6 +78,8 @@ public class Player extends Entity {
         screenY = gp.screenHeight / 2 - gp.tileSize / 2;
 
         solidArea = new Rectangle(8, 16, 32, 32);
+
+        weaponRenderer = new WeaponRenderer(gp);
 
         setDefaultValues();
         getPlayerImages();
@@ -194,7 +201,26 @@ public class Player extends Entity {
         return Files.newInputStream(resource);
     }
 
+    // ── Weapon Equipment Helper ───────────────────────────────────────────────
+
+    public Weapon getEquippedWeapon() {
+        if (gp.hotbar == null) return null;
+        Item selected = gp.hotbar.getSelectedItem();
+        return (selected instanceof Weapon w) ? w : null;
+    }
+
+    // ── Update ────────────────────────────────────────────────────────────────
+
     public void update() {
+        // Advance weapon animation ticks
+        weaponRenderer.update();
+
+        // Check SPACE bar attack
+        if (keyH.attackPressed) {
+            keyH.attackPressed = false;
+            triggerAttackAction();
+        }
+
         updateCombatAction();
         if (isLockedAction()) {
             return;
@@ -202,6 +228,18 @@ public class Player extends Entity {
         updateMovement();
         if (!isMoving()) {
             updateIdleAnimation();
+        }
+    }
+
+    private void triggerAttackAction() {
+        Weapon equipped = getEquippedWeapon();
+        if (equipped != null) {
+            if (!weaponRenderer.isAttacking()) {
+                weaponRenderer.startAttack(equipped);
+                attackSequence++;
+            }
+        } else {
+            startCombatAction("PUNCH", PUNCH);
         }
     }
 
@@ -223,7 +261,7 @@ public class Player extends Entity {
         }
 
         if (keyH.consumePunch()) {
-            startCombatAction("PUNCH", PUNCH);
+            triggerAttackAction();
         } else if (keyH.consumeKick()) {
             startCombatAction("KICK", KICK);
         } else if (keyH.blockPressed) {
@@ -384,10 +422,14 @@ public class Player extends Entity {
     }
 
     public boolean isAttacking() {
-        return "PUNCH".equals(actionState) || "KICK".equals(actionState);
+        return weaponRenderer.isAttacking() || "PUNCH".equals(actionState) || "KICK".equals(actionState);
     }
 
     public int getAttackDamage() {
+        Weapon equipped = getEquippedWeapon();
+        if (equipped != null && weaponRenderer.isAttacking()) {
+            return equipped.damage;
+        }
         return "KICK".equals(actionState) ? 40 : 25;
     }
 
@@ -408,9 +450,13 @@ public class Player extends Entity {
     }
 
     public void draw(Graphics2D g2) {
+        // 1. Draw player sprite
         BufferedImage image = getCurrentPlayerImage();
         int playerRenderSize = getPlayerRenderSize();
         drawCentered(g2, image, playerRenderSize);
+
+        // 2. Draw equipped weapon in hand (follows player and animates swings)
+        weaponRenderer.draw(g2, screenX, screenY, direction, getEquippedWeapon());
     }
 
     private BufferedImage getCurrentPlayerImage() {
