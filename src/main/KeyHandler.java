@@ -17,10 +17,18 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     public boolean kickPressed;
     public boolean blockPressed;
     public boolean dodgePressed;
+    public boolean runPressed;
+    public boolean rollPressed;
 
     private boolean punchRequested;
     private boolean kickRequested;
     private boolean dodgeRequested;
+    private boolean rollRequested;
+    private long inputOrder;
+    private long upOrder;
+    private long downOrder;
+    private long leftOrder;
+    private long rightOrder;
 
     @Override
     public void keyTyped(KeyEvent e) {
@@ -32,22 +40,38 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
 
         if (code == KeyEvent.VK_W) {
             upPressed = true;
+            upOrder = ++inputOrder;
         } else if (code == KeyEvent.VK_S) {
             downPressed = true;
+            downOrder = ++inputOrder;
         } else if (code == KeyEvent.VK_A) {
             leftPressed = true;
+            leftOrder = ++inputOrder;
         } else if (code == KeyEvent.VK_D) {
             rightPressed = true;
-        } else if (code == KeyEvent.VK_E) {
+            rightOrder = ++inputOrder;
+        } else if (code == KeyEvent.VK_J) {
+            if (!punchPressed) {
+                punchRequested = true;
+            }
+            punchPressed = true;
+        } else if (code == KeyEvent.VK_E || code == KeyEvent.VK_K) {
             if (!kickPressed) {
                 kickRequested = true;
             }
             kickPressed = true;
-        } else if (code == KeyEvent.VK_Q) {
+        } else if (code == KeyEvent.VK_Q || code == KeyEvent.VK_SPACE) {
             if (!dodgePressed) {
                 dodgeRequested = true;
             }
             dodgePressed = true;
+        } else if (code == KeyEvent.VK_CONTROL) {
+            if (!rollPressed) {
+                rollRequested = true;
+            }
+            rollPressed = true;
+        } else if (code == KeyEvent.VK_SHIFT) {
+            runPressed = true;
         }
     }
 
@@ -62,10 +86,16 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             leftPressed = false;
         } else if (code == KeyEvent.VK_D) {
             rightPressed = false;
-        } else if (code == KeyEvent.VK_E) {
+        } else if (code == KeyEvent.VK_J) {
+            punchPressed = false;
+        } else if (code == KeyEvent.VK_E || code == KeyEvent.VK_K) {
             kickPressed = false;
-        } else if (code == KeyEvent.VK_Q) {
+        } else if (code == KeyEvent.VK_Q || code == KeyEvent.VK_SPACE) {
             dodgePressed = false;
+        } else if (code == KeyEvent.VK_CONTROL) {
+            rollPressed = false;
+        } else if (code == KeyEvent.VK_SHIFT) {
+            runPressed = false;
         }
     }
 
@@ -87,6 +117,32 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         return requested;
     }
 
+    public synchronized boolean consumeRoll() {
+        boolean requested = rollRequested;
+        rollRequested = false;
+        return requested;
+    }
+
+    public synchronized String getMovementDirection() {
+        long latest = Math.max(Math.max(upPressed ? upOrder : 0,
+                downPressed ? downOrder : 0),
+                Math.max(leftPressed ? leftOrder : 0,
+                        rightPressed ? rightOrder : 0));
+        if (latest == upOrder && upPressed) {
+            return "up";
+        }
+        if (latest == downOrder && downPressed) {
+            return "down";
+        }
+        if (latest == leftOrder && leftPressed) {
+            return "left";
+        }
+        if (latest == rightOrder && rightPressed) {
+            return "right";
+        }
+        return null;
+    }
+
     @Override
     public synchronized void mousePressed(MouseEvent e) {
         if (e.getButton() == MouseEvent.BUTTON1) {
@@ -95,7 +151,10 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             }
             punchPressed = true;
         } else if (e.getButton() == MouseEvent.BUTTON3) {
-            blockPressed = true;
+            if (!kickPressed) {
+                kickRequested = true;
+            }
+            kickPressed = true;
         }
     }
 
@@ -104,7 +163,7 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         if (e.getButton() == MouseEvent.BUTTON1) {
             punchPressed = false;
         } else if (e.getButton() == MouseEvent.BUTTON3) {
-            blockPressed = false;
+            kickPressed = false;
         }
     }
 
@@ -130,9 +189,17 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         kickPressed = false;
         blockPressed = false;
         dodgePressed = false;
+        runPressed = false;
+        rollPressed = false;
         punchRequested = false;
         kickRequested = false;
         dodgeRequested = false;
+        rollRequested = false;
+        inputOrder = 0;
+        upOrder = 0;
+        downOrder = 0;
+        leftOrder = 0;
+        rightOrder = 0;
     }
 
     @Override
