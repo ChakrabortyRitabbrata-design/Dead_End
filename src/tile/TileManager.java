@@ -2,6 +2,7 @@ package tile;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,17 +14,32 @@ import javax.imageio.ImageIO;
 import main.GamePanel;
 
 /**
- * Manages all tile images, the ground layer, the independent collision layer,
- * and draws the visible portion of the world each frame.
+ * TileManager — loads all pixel-art tile images and renders the world.
  *
- * Tile array layout (IDs 0–19):
- *   0 grass       1 wall        2 water       3 dirt_path   4 tree
- *   5 sand        6 dark_grass  7 swamp_water 8 stone_floor 9 cobblestone
- *  10 lava_rock  11 cliff_edge 12 crystal_fl 13 shal_water 14 bridge_plank
- *  15 gravel     16 dead_grass 17 snow        18 mud         19 flower_grass
+ * Tile ID map (IDs 0–19):
+ *   0  grass          — base grass (4 variants applied per-position)
+ *   1  dirt_path      — walkable dirt/sand path
+ *   2  water_full     — deep water (blocking)
+ *   3  water_shore_n  — north shoreline (walkable)
+ *   4  water_shore_s  — south shoreline
+ *   5  water_shore_e  — east shoreline
+ *   6  water_shore_w  — west shoreline
+ *   7  water_corner_ne— water corner
+ *   8  grass_flowers  — flower grass variant
+ *   9  trans_dirt_n   — grass-dirt transition north
+ *  10  trans_dirt_ne  — transition NE
+ *  11  trans_dirt_e   — transition E
+ *  12  trans_dirt_se  — transition SE
+ *  13  trans_dirt_s   — transition S
+ *  14  trans_dirt_sw  — transition SW
+ *  15  trans_dirt_w   — transition W
+ *  16  trans_dirt_nw  — transition NW
+ *  17  bridge_plank   — wooden bridge (walkable)
+ *  18  lake_center    — deep lake water (blocking)
+ *  19  lake_shore     — lake shoreline (walkable)
  *
- * If a tile image file is missing, a solid-colour placeholder is used so the
- * game continues to run while artwork is being sourced.
+ * Sprites are loaded from res/tile/*.png — the verified pixel-art sprites
+ * extracted from the actual Forest RPG tileset (media_1793520886268_0e8f9f36.jpg).
  */
 public class TileManager {
 
@@ -38,30 +54,32 @@ public class TileManager {
     /**
      * Independent collision layer — column-major: collisionLayer[col][row].
      * 0 = walkable, 1 = blocked.
-     * A cell is impassable if tile[id].collision OR collisionLayer[col][row]==1.
      */
     public int[][] collisionLayer;
 
     /** The full parsed data for the currently loaded level. */
     public MapData currentMap;
 
+    // Grass variants for visual richness (all walkable, visually different)
+    private BufferedImage[] grassVariants;
+
     // =========================================================================
-    // Construction & initialisation
+    // Construction
     // =========================================================================
 
     public TileManager(GamePanel gp) {
-        this.gp = gp;
+        this.gp        = gp;
         tile           = new Tile[MAX_TILES];
         mapTilenum     = new int[gp.maxWorldCol][gp.maxWorldRow];
         collisionLayer = new int[gp.maxWorldCol][gp.maxWorldRow];
 
         getTileImage();
-        // Default: load Level 1 on startup
+        loadGrassVariants();
+
         try {
             loadLevel(1);
         } catch (IOException e) {
-            System.err.println("ERROR loading Level 1 map: " + e.getMessage());
-            // Fall back to the legacy map01.txt so the game still launches
+            System.err.println("ERROR loading Level 1: " + e.getMessage());
             loadLegacyMap();
         }
     }
@@ -70,36 +88,26 @@ public class TileManager {
     // Level loading
     // =========================================================================
 
-    /**
-     * Loads ground layer, collision layer and metadata for the given level.
-     * Safe to call at runtime (e.g. on level transition).
-     * Resizes tile arrays if the new map has different dimensions.
-     */
     public void loadLevel(int levelId) throws IOException {
         MapData data = MapLoader.loadLevel(levelId);
-        currentMap = data;
+        currentMap   = data;
 
-        // Resize arrays if map dimensions changed
         if (mapTilenum.length != data.mapWidth || mapTilenum[0].length != data.mapHeight) {
             mapTilenum     = new int[data.mapWidth][data.mapHeight];
             collisionLayer = new int[data.mapWidth][data.mapHeight];
         }
 
-        // Copy ground layer into our column-major arrays
         for (int col = 0; col < data.mapWidth; col++) {
             for (int row = 0; row < data.mapHeight; row++) {
                 int id = data.groundLayer[col][row];
-                // Clamp to valid tile range
                 mapTilenum[col][row]     = (id >= 0 && id < MAX_TILES) ? id : 0;
                 collisionLayer[col][row] = data.collisionLayer[col][row];
             }
         }
 
-        // Notify GamePanel of new dimensions (updates fog, minimap, etc.)
         gp.applyMapDimensions(data.mapWidth, data.mapHeight);
     }
 
-    /** Legacy fallback: reads the original map01.txt into ground layer only. */
     private void loadLegacyMap() {
         try (InputStream is = openResource("map/map01.txt");
              java.io.BufferedReader br =
@@ -118,137 +126,168 @@ public class TileManager {
                 }
                 row++;
             }
-            System.out.println("TileManager: loaded legacy map01.txt as fallback.");
         } catch (Exception e) {
-            System.err.println("TileManager: legacy map also failed: " + e.getMessage());
+            System.err.println("TileManager: legacy map failed: " + e.getMessage());
         }
     }
 
     // =========================================================================
-    // Tile image loading
+    // Tile setup — maps each ID to the correct verified sprite file
     // =========================================================================
 
-    public void getTileImage() {
-        // --- Existing tiles (artwork present) ---
-        setup(0,  "grass",          false, new Color(0x5D, 0xA8, 0x32));
-        setup(1,  "wall",           true,  new Color(0x88, 0x88, 0x88));
-        setup(2,  "water",          true,  new Color(0x1A, 0x6F, 0xB0));
-        setup(3,  "earth",          false, new Color(0x8B, 0x69, 0x14));
-        setup(4,  "tree",           true,  new Color(0x2B, 0x6B, 0x2B));
-        setup(5,  "sand",           false, new Color(0xD4, 0xB9, 0x6B));
-        // --- New tiles (artwork optional — placeholder colour used if missing) ---
-        setup(6,  "dark_grass",     false, new Color(0x2D, 0x3B, 0x1A));
-        setup(7,  "swamp_water",    true,  new Color(0x3A, 0x50, 0x22));
-        setup(8,  "stone_floor",    false, new Color(0x70, 0x70, 0x70));
-        setup(9,  "cobblestone",    false, new Color(0x99, 0x88, 0x77));
-        setup(10, "lava_rock",      true,  new Color(0x8B, 0x25, 0x00));
-        setup(11, "cliff_edge",     true,  new Color(0x55, 0x55, 0x66));
-        setup(12, "crystal_floor",  false, new Color(0x66, 0xCC, 0xFF));
-        setup(13, "shallow_water",  false, new Color(0x55, 0x99, 0xDD));
-        setup(14, "bridge_plank",   false, new Color(0xA0, 0x78, 0x4A));
-        setup(15, "gravel",         false, new Color(0x88, 0x77, 0x66));
-        setup(16, "dead_grass",     false, new Color(0x6B, 0x6B, 0x3A));
-        setup(17, "snow",           false, new Color(0xDD, 0xDD, 0xEE));
-        setup(18, "mud",            false, new Color(0x4A, 0x38, 0x28));
-        setup(19, "flower_grass",   false, new Color(0x6D, 0xB8, 0x40));
+    private void getTileImage() {
+        // ID  sprite-file-name              collision  minimap-colour
+        setup( 0, "grass_plain",      false, new Color(0x5B, 0x8E, 0x3E));  // grass base
+        setup( 1, "dirt_t_south",     false, new Color(0x9B, 0x74, 0x42));  // dirt path (main centre tile)
+        setup( 2, "water_full",       true,  new Color(0x26, 0x5A, 0xA0));  // deep water
+        setup( 3, "water_shore_n",    false, new Color(0x4A, 0x8A, 0xAA));  // shore N
+        setup( 4, "water_shore_s",    false, new Color(0x4A, 0x8A, 0xAA));  // shore S
+        setup( 5, "water_shore_e",    false, new Color(0x4A, 0x8A, 0xAA));  // shore E
+        setup( 6, "water_shore_w",    false, new Color(0x4A, 0x8A, 0xAA));  // shore W
+        setup( 7, "water_corner_ne",  false, new Color(0x5A, 0x8E, 0xB0));  // corner
+        setup( 8, "grass_flowers",    false, new Color(0x70, 0xA8, 0x48));  // flower grass
+        setup( 9, "trans_dirt_n",     false, new Color(0x70, 0x98, 0x48));  // transition N
+        setup(10, "trans_dirt_ne",    false, new Color(0x70, 0x98, 0x48));  // transition NE
+        setup(11, "trans_dirt_e",     false, new Color(0x70, 0x98, 0x48));  // transition E
+        setup(12, "trans_dirt_se",    false, new Color(0x70, 0x98, 0x48));  // transition SE
+        setup(13, "trans_dirt_s",     false, new Color(0x70, 0x98, 0x48));  // transition S
+        setup(14, "trans_dirt_sw",    false, new Color(0x70, 0x98, 0x48));  // transition SW
+        setup(15, "trans_dirt_w",     false, new Color(0x70, 0x98, 0x48));  // transition W
+        setup(16, "trans_dirt_nw",    false, new Color(0x70, 0x98, 0x48));  // transition NW
+        setup(17, "bridge_horizontal",false, new Color(0x8A, 0x62, 0x2E));  // bridge
+        setup(18, "lake_center",      true,  new Color(0x26, 0x5A, 0xA0));  // lake deep
+        setup(19, "lake_north",       false, new Color(0x46, 0x82, 0xA8));  // lake shore
     }
 
-    /**
-     * Loads one tile. If the image file is missing, creates a solid-colour
-     * placeholder so the game never crashes due to missing artwork.
-     */
-    private void setup(int id, String name, boolean collision, Color fallbackColor) {
+    // =========================================================================
+    // Grass variant system — 4 variants for visual richness
+    // =========================================================================
+
+    private void loadGrassVariants() {
+        String[] files = {"grass_plain", "grass_detail1", "grass_detail2", "grass_extra_a"};
+        grassVariants  = new BufferedImage[files.length];
+        for (int i = 0; i < files.length; i++) {
+            try {
+                BufferedImage raw = readImage("tile/" + files[i] + ".png");
+                grassVariants[i] = scaleNearest(raw, gp.tileSize, gp.tileSize);
+            } catch (IOException e) {
+                grassVariants[i] = makePlaceholder(new Color(0x5B, 0x8E, 0x3E));
+            }
+        }
+    }
+
+    private BufferedImage getGrassVariant(int col, int row) {
+        // Deterministic hash — never a visible checkerboard pattern
+        int h = (col * 73856093) ^ (row * 19349663) ^ (col * 83492791);
+        int n = Math.abs(h) % 100;
+        if (n < 55) return grassVariants[0];   // 55% plain grass
+        if (n < 78) return grassVariants[1];   // 23% detail1
+        if (n < 92) return grassVariants[2];   // 14% detail2
+        return grassVariants[3];               //  8% extra variant
+    }
+
+    // =========================================================================
+    // Tile loading helpers
+    // =========================================================================
+
+    private void setup(int id, String imgName, boolean collision, Color miniColor) {
         tile[id] = new Tile();
-        tile[id].name          = name;
-        tile[id].collision     = collision;
-        tile[id].minimapColor  = fallbackColor;
+        tile[id].name         = imgName;
+        tile[id].collision    = collision;
+        tile[id].minimapColor = miniColor;
 
-        String path = "tile/" + name + ".png";
         try {
-            tile[id].Image = readImage(path);
+            BufferedImage raw = readImage("tile/" + imgName + ".png");
+            tile[id].Image = scaleNearest(raw, gp.tileSize, gp.tileSize);
         } catch (IOException e) {
-            // Artwork not yet available — generate solid-colour placeholder
-            tile[id].Image = makePlaceholder(fallbackColor);
-            System.out.println("TileManager: using placeholder for tile " + id
-                    + " (" + name + ")");
+            tile[id].Image = makePlaceholder(miniColor);
+            System.out.println("TileManager: placeholder for " + id + " (" + imgName + ")");
         }
     }
 
-    /** Creates a solid-colour 48×48 BufferedImage as a placeholder tile. */
+    /** NEAREST_NEIGHBOR scaling — mandatory for crisp pixel art. */
+    public static BufferedImage scaleNearest(BufferedImage src, int w, int h) {
+        if (src.getWidth() == w && src.getHeight() == h) return src;
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                           RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g.drawImage(src, 0, 0, w, h, null);
+        g.dispose();
+        return out;
+    }
+
     private BufferedImage makePlaceholder(Color color) {
-        int size = gp.tileSize;
-        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2 = img.createGraphics();
-        g2.setColor(color);
-        g2.fillRect(0, 0, size, size);
-        // Add a subtle 1-px darker border so tiles are visually distinct
-        g2.setColor(color.darker());
-        g2.drawRect(0, 0, size - 1, size - 1);
-        g2.dispose();
+        int sz = gp.tileSize;
+        BufferedImage img = new BufferedImage(sz, sz, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(color);
+        g.fillRect(0, 0, sz, sz);
+        g.setColor(color.darker());
+        g.drawRect(0, 0, sz - 1, sz - 1);
+        g.dispose();
         return img;
     }
 
     // =========================================================================
-    // Drawing
+    // Rendering
     // =========================================================================
 
     public void draw(Graphics2D g2) {
-        int worldCol = 0;
-        int worldRow = 0;
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                            RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING,
+                            RenderingHints.VALUE_RENDER_QUALITY);
+
+        int worldCol = 0, worldRow = 0;
 
         while (worldCol < gp.maxWorldCol && worldRow < gp.maxWorldRow) {
             int tileNum = mapTilenum[worldCol][worldRow];
-
             int worldX  = worldCol * gp.tileSize;
             int worldY  = worldRow * gp.tileSize;
             int screenX = worldX - gp.player.worldX + gp.player.screenX;
             int screenY = worldY - gp.player.worldY + gp.player.screenY;
 
-            // Camera culling — only draw tiles that overlap the viewport
+            // Camera culling
             if (worldX + gp.tileSize > gp.player.worldX - gp.player.screenX
                     && worldX - gp.tileSize < gp.player.worldX + gp.player.screenX
                     && worldY + gp.tileSize > gp.player.worldY - gp.player.screenY
                     && worldY - gp.tileSize < gp.player.worldY + gp.player.screenY) {
 
-                g2.drawImage(tile[tileNum].Image,
-                        screenX, screenY, gp.tileSize, gp.tileSize, null);
+                BufferedImage img = (tileNum == 0 && grassVariants != null)
+                        ? getGrassVariant(worldCol, worldRow)
+                        : tile[tileNum].Image;
 
-                // Fog-of-war overlay (drawn on top of the tile)
+                g2.drawImage(img, screenX, screenY, gp.tileSize, gp.tileSize, null);
+
                 if (gp.fogOfWar != null) {
-                    gp.fogOfWar.drawOverlay(g2, screenX, screenY, gp.tileSize,
-                            worldCol, worldRow);
+                    gp.fogOfWar.drawOverlay(g2, screenX, screenY,
+                            gp.tileSize, worldCol, worldRow);
                 }
             }
 
-            worldCol++;
-            if (worldCol == gp.maxWorldCol) {
-                worldCol = 0;
-                worldRow++;
-            }
+            if (++worldCol == gp.maxWorldCol) { worldCol = 0; worldRow++; }
         }
     }
 
     // =========================================================================
-    // Resource helpers (same two-step fallback pattern as the rest of the engine)
+    // Resource loading — two-step fallback (classpath → file system)
     // =========================================================================
 
-    private BufferedImage readImage(String resourcePath) throws IOException {
-        try (InputStream stream = openResource(resourcePath)) {
-            BufferedImage image = ImageIO.read(stream);
-            if (image == null)
-                throw new IOException("Not a readable image: " + resourcePath);
-            return image;
+    private BufferedImage readImage(String path) throws IOException {
+        try (InputStream s = openResource(path)) {
+            BufferedImage img = ImageIO.read(s);
+            if (img == null) throw new IOException("Not a valid image: " + path);
+            return img;
         }
     }
 
     private InputStream openResource(String resourcePath) throws IOException {
-        InputStream stream = getClass().getResourceAsStream("/" + resourcePath);
-        if (stream != null) return stream;
-
-        Path resource = Paths.get("res", resourcePath);
-        if (!Files.exists(resource)) resource = Paths.get("bin", resourcePath);
-        if (!Files.exists(resource))
-            throw new IOException("Resource not found: " + resourcePath);
-        return Files.newInputStream(resource);
+        InputStream s = getClass().getResourceAsStream("/" + resourcePath);
+        if (s != null) return s;
+        Path p = Paths.get("res", resourcePath);
+        if (!Files.exists(p)) p = Paths.get("bin", resourcePath);
+        if (!Files.exists(p)) throw new IOException("Resource not found: " + resourcePath);
+        return Files.newInputStream(p);
     }
 }

@@ -1,0 +1,106 @@
+# ================================================================
+# DEAD_END — Tileset Asset Metadata
+# Source: media_1793520886268_0e8f9f36.jpg (1024x682)
+# Extraction date: 2026-11-01
+# ================================================================
+# Format: ID | Category | Name | SrcX | SrcY | SrcW | SrcH | IsTile | Collision | RenderW | RenderH
+# ================================================================
+
+# ---- GRASS TILES ----
+G00 | grass      | grass_extra_a        |  18|  35|  67|  68 | tile   | false |  48|  48
+G01 | grass      | grass_extra_b        |  18| 109|  67|  68 | tile   | false |  48|  48
+G02 | grass      | grass_extra_c        |  18| 189|  60|  62 | tile   | false |  48|  48
+G10 | grass      | grass_plain          |  93|  35|  63|  68 | tile   | false |  48|  48
+G11 | grass      | grass_flowers        | 165|  35|  62|  68 | tile   | false |  48|  48
+G20 | grass      | grass_detail1        |  94| 109|  64|  68 | tile   | false |  48|  48
+G21 | grass      | grass_detail2        | 165| 109|  63|  68 | tile   | false |  48|  48
+
+# ---- DIRT PATH TILES ----
+D10 | dirt       | dirt_cross           | 236|  35|  60|  68 | tile   | false |  48|  48
+D11 | dirt       | dirt_t_north         | 306|  35|  65|  68 | tile   | false |  48|  48
+D12 | dirt       | dirt_t_east          | 380|  35|  64|  68 | tile   | false |  48|  48
+D13 | dirt       | dirt_t_west          | 453|  35|  64|  68 | tile   | false |  48|  48
+D14 | dirt       | dirt_t_south         | 525|  35|  65|  68 | tile   | false |  48|  48
+
+# ---- TERRAIN TRANSITION TILES (grass-to-dirt edges) ----
+T20 | transition | trans_dirt_n         | 236| 109|  64|  68 | tile   | false |  48|  48
+T21 | transition | trans_dirt_ne        | 308| 109|  66|  68 | tile   | false |  48|  48
+T22 | transition | trans_dirt_e         | 382| 109|  66|  68 | tile   | false |  48|  48
+T23 | transition | trans_dirt_se        | 455| 109|  64|  68 | tile   | false |  48|  48
+T24 | transition | trans_dirt_s         | 527| 109|  66|  68 | tile   | false |  48|  48
+T30 | transition | trans_dirt_sw        |  86| 189|  60|  62 | tile   | false |  48|  48
+T31 | transition | trans_dirt_w         | 154| 189|  60|  62 | tile   | false |  48|  48
+T32 | transition | trans_dirt_nw        | 223| 189|  60|  62 | tile   | false |  48|  48
+T33 | transition | trans_corner_out_ne  | 292| 189|  60|  62 | tile   | false |  48|  48
+T34 | transition | trans_corner_out_se  | 363| 189|  58|  62 | tile   | false |  48|  48
+T35 | transition | trans_corner_out_sw  | 430| 189|  57|  62 | tile   | false |  48|  48
+T36 | transition | trans_corner_out_nw  | 497| 189|  87|  62 | tile   | false |  48|  48
+
+# ---- WATER TILES ----
+W00 | water      | water_full           |  16| 273|  73|  79 | tile   | true  |  48|  48
+W01 | water      | water_ripple         |  97| 273|  75|  79 | tile   | true  |  48|  48
+W02 | water      | water_shore_n        | 179| 273|  76|  79 | tile   | false |  48|  48
+W03 | water      | water_shore_e        | 264| 273|  73|  79 | tile   | false |  48|  48
+W20 | water      | water_shore_s        | 350| 272|  75|  78 | tile   | false |  48|  48
+W21 | water      | water_shore_w        | 434| 272|  77|  78 | tile   | false |  48|  48
+W22 | water      | water_corner_ne      | 530| 272|  77|  78 | tile   | false |  48|  48
+
+# ---- LAKE TILES ----
+W10 | water      | lake_sw_corner       |  14| 367| 101|  96 | tile   | false |  48|  48
+W11 | water      | lake_edge_w          | 132| 367| 100|  96 | tile   | false |  48|  48
+W12 | water      | lake_center          | 255| 367|  93|  96 | tile   | true  |  48|  48
+W23 | water      | lake_nw_corner       | 627| 272| 170|  78 | tile   | false |  96|  48
+W30 | water      | lake_north           | 367| 366| 104|  98 | tile   | false |  48|  48
+W31 | water      | lake_ne_corner       | 489| 366|  94|  98 | tile   | false |  48|  48
+W32 | water      | lake_se_corner       | 597| 366|  95|  98 | tile   | false |  48|  48
+W33 | water      | lake_south           | 706| 366|  97|  98 | tile   | false |  48|  48
+
+# ---- BRIDGE OBJECTS ----
+B00 | bridge     | bridge_horizontal    | 826| 269|  78| 135 | object | false |  96|  48
+B01 | bridge     | bridge_vertical      | 926| 271|  76| 111 | object | false |  48|  96
+
+# ---- TREES (environmental objects, not tiles) ----
+TR00 | tree      | tree_deciduous_lg    | 610|  14| 104| 129 | object | true  |  96| 120
+TR01 | tree      | tree_pine_lg         | 721|  14| 100| 129 | object | true  |  80| 120
+TR02 | tree      | tree_pine_lg2        | 827|  14|  83| 129 | object | true  |  72| 120
+TR03 | tree      | tree_extra_lg        | 920|  14|  86| 129 | object | true  |  80| 120
+TR10 | tree      | tree_deciduous_md    | 602| 150|  91| 101 | object | true  |  80|  90
+TR11 | tree      | tree_pine_md         | 702| 150|  84| 101 | object | true  |  72|  90
+TR12 | tree      | tree_deciduous_md2   | 800| 150| 113| 101 | object | true  |  88|  90
+TR13 | tree      | tree_extra_md        | 926| 150|  82| 101 | object | true  |  72|  90
+
+# ---- ROCKS (environmental objects) ----
+R00 | rock       | rock_mossy_lg        |  15| 484|  94|  68 | object | true  |  80|  56
+R01 | rock       | rock_grey_md         |  11| 564|  91|  70 | object | true  |  70|  56
+R10 | rock       | rock_grey_sm         | 122| 494|  69|  55 | object | true  |  56|  44
+R11 | rock       | rock_pebbles         | 205| 494|  53|  55 | object | false |  44|  40
+R12 | rock       | rock_tiny            | 272| 494|  42|  55 | object | false |  36|  36
+R20 | rock       | stones_cluster       | 770| 577|  42|  46 | object | false |  40|  36
+R21 | rock       | stone_single         | 824| 577|  49|  46 | object | false |  36|  32
+
+# ---- STUMPS (environmental objects) ----
+S00 | stump      | stump_large          | 116| 562|  89|  71 | object | false |  64|  56
+S01 | stump      | stump_small          | 215| 562|  95|  71 | object | false |  56|  48
+
+# ---- LOGS (environmental objects) ----
+L00 | log        | log_plain            | 399| 488|  91|  68 | object | false |  80|  48
+L01 | log        | log_mossy            | 498| 488|  64|  68 | object | false |  64|  48
+
+# ---- VEGETATION (environmental objects) ----
+VG00 | vegetation | bush_large          | 328| 573|  72|  48 | object | false |  64|  48
+VG01 | vegetation | bush_flowers        | 407| 573|  65|  48 | object | false |  56|  48
+VG02 | vegetation | grass_tuft1         | 480| 573|  52|  48 | object | false |  48|  40
+VG03 | vegetation | grass_tuft2         | 544| 573|  38|  48 | object | false |  36|  36
+VG04 | vegetation | grass_tuft3         | 599| 573|  50|  48 | object | false |  44|  36
+VG05 | vegetation | flower_white        | 662| 573|  46|  48 | object | false |  44|  36
+VG06 | vegetation | flower_yellow       | 720| 573|  38|  48 | object | false |  36|  36
+VG10 | vegetation | bush_berry_lg       | 779| 496| 119|  57 | object | false |  96|  48
+
+# ---- SIGNPOSTS ----
+SN00 | signpost  | signpost             | 649| 488| 110|  68 | object | false |  80|  64
+SN01 | signpost  | signpost_arrow       | 922| 486|  86| 115 | object | false |  64|  96
+
+# ---- OTHER ----
+O00 | other      | rock_outline_sm      | 332| 488|  30|  68 | object | false |  28|  36
+O01 | other      | rock_outline_xs      | 365| 488|  14|  68 | object | false |  14|  28
+O02 | other      | mushroom             | 571| 488|  54|  68 | object | false |  40|  40

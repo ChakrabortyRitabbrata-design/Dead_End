@@ -64,6 +64,7 @@ public class GamePanel extends JPanel implements Runnable {
     public FogOfWar       fogOfWar;
     public Minimap        minimap;
     public LevelManager   levelM;
+    public DecorRenderer  decorR;
 
     // =========================================================================
     // World objects
@@ -111,6 +112,10 @@ public class GamePanel extends JPanel implements Runnable {
         minimap  = new Minimap(this);
         levelM   = new LevelManager(this);
 
+        // Build the decor/vegetation renderer from the loaded map
+        decorR = new DecorRenderer(this);
+        decorR.buildDecorList();
+
         // Wire minimap reference into keyH so click detection works
         keyH.minimap = minimap;
 
@@ -137,6 +142,7 @@ public class GamePanel extends JPanel implements Runnable {
         worldHeight = rows * tileSize;
         if (fogOfWar != null) fogOfWar.resize(cols, rows);
         if (minimap  != null) minimap.buildColorCache();
+        if (decorR   != null) decorR.buildDecorList();
     }
 
     // =========================================================================
@@ -223,10 +229,13 @@ public class GamePanel extends JPanel implements Runnable {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
 
-        // --- World ---
+        // --- World (ground tiles) ---
         tileM.draw(g2);
 
-        // --- Objects ---
+        // --- Ground-level decor (grass tufts, small rocks, logs) ---
+        if (decorR != null) decorR.drawBelowPlayer(g2);
+
+        // --- Objects (houses, wells, etc.) ---
         for (SuperObject obj : objects) {
             if (obj != null) obj.draw(g2, this);
         }
@@ -235,6 +244,9 @@ public class GamePanel extends JPanel implements Runnable {
         if (dragonActive && dragon != null) dragon.draw(g2);
         for (Monster m : monsters) m.draw(g2);
         player.draw(g2);
+
+        // --- Tall decor above player (trees, bushes — Y-sorted) ---
+        if (decorR != null) decorR.drawAbovePlayer(g2);
 
         // --- HUD minimap (always drawn in PLAYING / FULL_MAP states) ---
         if (gameState == GameState.PLAYING || gameState == GameState.FULL_MAP) {
