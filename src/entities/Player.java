@@ -63,6 +63,10 @@ public class Player extends Entity {
     private int dodgeDistanceRemaining;
     private int rollDistanceRemaining;
     private boolean attackHitApplied;
+    /** Level-1 passive regen: accumulates idle nanos, regens 8 HP every 1 s. */
+    private long idleRegenAccumNanos = 0;
+    private static final long REGEN_INTERVAL_NANOS = 1_000_000_000L;
+    private static final int REGEN_AMOUNT = 8;
 
     public Player(GamePanel gp, KeyHandler keyH) {
         this.gp = gp;
@@ -453,14 +457,30 @@ public class Player extends Entity {
         if (moving) {
             facing = input;
             direction = directionName(facing);
-            speed = keyH.runPressed ? 6 : 4;
+            speed = keyH.runPressed ? 9 : 6;
             moveWithCollision(speed);
             setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
+            idleRegenAccumNanos = 0; // reset regen on movement
         } else {
-            speed = 4;
+            speed = 6;
             setState(AnimationState.IDLE);
+            tickIdleRegen(delta); // passive regen while idle in level 1
         }
         updateAnimation(delta);
+    }
+
+    /** +8 HP every 1 s while idle in Level 1 and not at max health. */
+    private void tickIdleRegen(long delta) {
+        if (gp.levelM == null || gp.levelM.currentLevel != 1) return;
+        if (health <= 0 || health >= getMaxHealth()) {
+            idleRegenAccumNanos = 0;
+            return;
+        }
+        idleRegenAccumNanos += delta;
+        while (idleRegenAccumNanos >= REGEN_INTERVAL_NANOS) {
+            idleRegenAccumNanos -= REGEN_INTERVAL_NANOS;
+            health = Math.min(getMaxHealth(), health + REGEN_AMOUNT);
+        }
     }
 
     private void updateEvasionMovement() {
@@ -561,7 +581,7 @@ public class Player extends Entity {
     }
 
     public int getAttackDamage() {
-        return state == AnimationState.KICK ? 20 : 10;
+        return state == AnimationState.KICK ? 35 : 25;
     }
 
     public boolean isBlocking() {
@@ -620,6 +640,7 @@ public class Player extends Entity {
         }
         damageInvulnerabilityNanos = DAMAGE_INVULNERABILITY_NANOS;
         hurtRemainingNanos = HURT_LOCK_NANOS;
+        idleRegenAccumNanos = 0; // combat resets idle regen
         health = Math.max(0, health - damage);
         if (health == 0) {
             actionDirection = facing;

@@ -299,6 +299,7 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         drawPlayerHealthBar(g2);
+        drawScoreHUD(g2);
 
         // --- Full-screen map overlay ---
         if (gameState == GameState.FULL_MAP) {
@@ -345,6 +346,50 @@ public class GamePanel extends JPanel implements Runnable {
         g2.fillRect(x, y, fillWidth, barHeight);
         g2.setColor(new Color(239, 224, 191));
         g2.drawRect(x, y, barWidth, barHeight);
+    }
+
+    /** Score and next-level requirement HUD panel, below the HP bar. */
+    private void drawScoreHUD(Graphics2D g2) {
+        long score = levelM.progression.score();
+        int level = levelM.currentLevel;
+
+        // determine next threshold
+        String nextLabel;
+        long nextThreshold;
+        boolean allUnlocked = level >= 3 && levelM.progression.unlocked(2);
+        if (level == 1 && !levelM.progression.unlocked(1)) {
+            nextThreshold = levelM.progression.requirement(1);
+            nextLabel = "Next Level: " + nextThreshold + " Score";
+        } else if (level <= 2 && !levelM.progression.unlocked(2)) {
+            nextThreshold = levelM.progression.requirement(2);
+            nextLabel = "Next Level: " + nextThreshold + " Score";
+        } else {
+            nextThreshold = -1;
+            nextLabel = "Max Level";
+        }
+
+        int x = 24;
+        int y = 155; // below the HP bar (which ends around y=138)
+        int panelW = 196;
+        int panelH = nextThreshold >= 0 ? 54 : 36;
+
+        g2.setColor(new Color(0, 0, 0, 185));
+        g2.fillRoundRect(x - 8, y - 4, panelW, panelH, 8, 8);
+
+        g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        g2.setColor(new Color(232, 224, 194));
+        g2.drawString("Score: " + score, x, y + 12);
+
+        if (nextThreshold >= 0) {
+            long needed = Math.max(0, nextThreshold - score);
+            g2.setColor(new Color(255, 220, 100));
+            g2.drawString(nextLabel, x, y + 28);
+            g2.setColor(new Color(200, 200, 200));
+            g2.drawString(needed + " more needed", x, y + 44);
+        } else {
+            g2.setColor(new Color(100, 220, 100));
+            g2.drawString("All areas unlocked!", x, y + 28);
+        }
     }
 
     private void drawEndScreen(Graphics2D g2, String text, Color color) {

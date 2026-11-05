@@ -37,8 +37,8 @@ public final class WorldIntegrationTest {
         check(!p.unlock(1),"Locked gate accepted insufficient Power");
         check(p.award("first","undead"),"First award failed");check(!p.award("first","undead"),"Duplicate award");
         for(int i=0;i<9;i++) p.award("test"+i,"undead");
-        check(p.score()==1000&&p.power()==2000,"Score/Power not independent");
-        check(p.unlock(1)&&p.power()==2000,"Unlock consumed Power");check(!p.unlock(1),"Unlock repeated");
+        check(p.score()==100,"Score not independent");
+        check(p.unlock(1)&&p.score()==100,"Unlock consumed Score");check(!p.unlock(1),"Unlock repeated");
         FogOfWar fog=new FogOfWar(64,52);fog.update(10,10);fog.update(50,40);
         check(fog.getState(10,10)==FogOfWar.EXPLORED,"Teleport left stale VISIBLE fog");
         FogOfWar copy=new FogOfWar(64,52);copy.decode(fog.encode());check(copy.getState(10,10)==FogOfWar.EXPLORED,"Fog roundtrip");
@@ -51,7 +51,7 @@ public final class WorldIntegrationTest {
         gp.gameState=GamePanel.GameState.FULL_MAP;render(gp,output.resolve("atlas-locked.png"));gp.gameState=GamePanel.GameState.PLAYING;
         int total=gp.monsters.size();check(total==14,"Level 1 spawn budget: "+total);
         Monster first=gp.monsters.get(0);String defeatedId=first.persistentId;first.takeDamage(1000);first.takeDamage(1000);
-        check(gp.levelM.progression.power()==200,"Actual death duplicate rewards");
+        check(gp.levelM.progression.score()==10,"Actual death duplicate rewards");
         for(int i=1;i<10;i++) gp.monsters.get(i).takeDamage(1000);
         gp.player.worldX=57*48;gp.player.worldY=7*48;gp.levelM.checkProgression();
         gp.fogOfWar.update(57,7);
@@ -69,9 +69,9 @@ public final class WorldIntegrationTest {
         gp.gameState=GamePanel.GameState.FULL_MAP;render(gp,output.resolve("atlas-unlocked.png"));gp.gameState=GamePanel.GameState.PLAYING;
         gp.levelM.enter(1,55,9);check(gp.fogOfWar.getState(10,40)==FogOfWar.EXPLORED,"Return lost fog");
         check(gp.monsters.stream().anyMatch(m->m.persistentId.equals(defeatedId)&&m.health==0),"Return revived defeated enemy");
-        long power=gp.levelM.progression.power();Path save=output.resolve("test-save.properties");gp.levelM.save(save);
+        long savedScore=gp.levelM.progression.score();Path save=output.resolve("test-save.properties");gp.levelM.save(save);
         GamePanel restored=new GamePanel();restored.setupGame();restored.levelM.load(save);
-        check(restored.levelM.progression.power()==power&&restored.levelM.progression.unlocked(2),"Save lost progression");
+        check(restored.levelM.progression.score()==savedScore&&restored.levelM.progression.unlocked(2),"Save lost progression");
         check(restored.monsters.stream().noneMatch(m->m.persistentId.equals(defeatedId)),"Save revived defeated enemy");
         check(restored.fogOfWar.getState(10,40)==FogOfWar.EXPLORED,"Save lost exploration");
         restored.levelM.enter(2,8,44);check(restored.fogOfWar.getState(35,24)==FogOfWar.EXPLORED,"Other-region fog lost");

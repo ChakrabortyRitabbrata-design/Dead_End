@@ -29,7 +29,7 @@ public class LevelManager {
             if(interact) {
                 if(progression.unlocked(gate.id())) {
                     arrivalCol=gate.arrivalCol();arrivalRow=gate.arrivalRow();beginTransition(gate.destination());
-                } else notifyPlayer("Locked: "+progression.power()+" / "+progression.requirement(gate.id())+" Power");
+                } else notifyPlayer("Locked: "+progression.score()+" / "+progression.requirement(gate.id())+" Score needed");
             }
         }
     }

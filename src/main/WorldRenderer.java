@@ -117,7 +117,7 @@ public final class WorldRenderer {
             for(int n=0;n<6;n++) {int yy=y-((phase+n*13)%100);g.fillRect(x+(n*19%45)-12,yy,3,5);}
             if(Math.hypot(gp.player.worldX/48-gate.col(),gp.player.worldY/48-gate.row())<=4) {
                 g.setFont(new Font("SansSerif",Font.BOLD,12));g.setColor(Color.WHITE);
-                g.drawString(open?"F • Travel through ward":"F • "+gp.levelM.progression.power()+" / "+gp.levelM.progression.requirement(gate.id())+" Power",x-80,y+55);
+                g.drawString(open?"F • Travel through ward":"F • "+gp.levelM.progression.score()+" / "+gp.levelM.progression.requirement(gate.id())+" Score",x-80,y+55);
             }
         }
     }
@@ -173,9 +173,9 @@ public final class WorldRenderer {
         g.setColor(new Color(14,22,29,225));g.fillRoundRect(16,16,365,88,14,14);
         g.setColor(new Color(0xd9d0b3));g.setFont(new Font("Serif",Font.BOLD,19));g.drawString(gp.tileM.currentMap.levelName,29,42);
         g.setFont(new Font("SansSerif",Font.PLAIN,13));
-        Progression p=gp.levelM.progression;g.drawString("Score  "+p.score()+"    Power  "+p.power()+"    HP  "+gp.player.getHealth(),29,66);
+        Progression p=gp.levelM.progression;g.drawString("Score  "+p.score()+"    HP  "+gp.player.getHealth(),29,66);
         int gate=!p.unlocked(1)?1:!p.unlocked(2)?2:0;
-        g.setColor(new Color(0x91b9b6));g.drawString(gate==0?"Both wards open • Seek the dragon":"Next ward  "+p.requirement(gate)+"  •  "+Math.max(0,p.requirement(gate)-p.power())+" Power needed",29,88);
+        g.setColor(new Color(0x91b9b6));g.drawString(gate==0?"Both wards open • Seek the dragon":"Next ward  "+p.requirement(gate)+"  •  "+Math.max(0,p.requirement(gate)-p.score())+" Score needed",29,88);
         g.setColor(new Color(14,22,29,220));g.fillRoundRect(16,gp.screenHeight-55,gp.screenWidth-32,41,10,10);
         g.setColor(new Color(0xd9d0b3));g.drawString(gp.levelM.notification().isEmpty()?"WASD move · Mouse / E fight · Q dodge · F gate · M map · F5 save · F9 load":gp.levelM.notification(),29,gp.screenHeight-29);
     }
