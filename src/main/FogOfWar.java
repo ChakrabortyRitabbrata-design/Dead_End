@@ -150,8 +150,8 @@ public class FogOfWar {
 
         // Phase 1 — demote previously visible cells in a slightly larger sweep area
         int sweepR = r + 1;
-        for (int c = pCol - sweepR; c <= pCol + sweepR; c++) {
-            for (int row = pRow - sweepR; row <= pRow + sweepR; row++) {
+        for (int c = 0; c < effectiveCols; c++) {
+            for (int row = 0; row < effectiveRows; row++) {
                 if (c >= 0 && c < effectiveCols && row >= 0 && row < effectiveRows) {
                     if (tileState[c][row] == VISIBLE) tileState[c][row] = EXPLORED;
                 }
@@ -275,4 +275,17 @@ public class FogOfWar {
     }
 
     public int getVisibilityRadius() { return visibilityRadius; }
+
+    public String encode() {
+        java.util.BitSet bits=new java.util.BitSet(effectiveCols*effectiveRows);
+        for(int c=0;c<effectiveCols;c++) for(int r=0;r<effectiveRows;r++)
+            if(tileState[c][r]!=UNEXPLORED) bits.set(r*effectiveCols+c);
+        return java.util.Base64.getEncoder().encodeToString(bits.toByteArray());
+    }
+    public void decode(String encoded) {
+        java.util.BitSet bits=java.util.BitSet.valueOf(java.util.Base64.getDecoder().decode(encoded));
+        if(bits.length()>effectiveCols*effectiveRows) throw new IllegalArgumentException("Fog dimensions");
+        for(int c=0;c<effectiveCols;c++) for(int r=0;r<effectiveRows;r++)
+            tileState[c][r]=bits.get(r*effectiveCols+c)?EXPLORED:UNEXPLORED;
+    }
 }

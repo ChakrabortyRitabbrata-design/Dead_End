@@ -4,6 +4,8 @@ import main.GamePanel;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,6 +15,9 @@ import java.nio.file.Paths;
 import javax.imageio.ImageIO;
 
 public class Monster {
+
+    /** Stable world identity used by the Score/Power ledger and save data. */
+    public String persistentId = java.util.UUID.randomUUID().toString();
 
     private static final int DIRECTION_COUNT = 4;
     private static final int FRAME_COUNT = 4;
@@ -65,21 +70,89 @@ public class Monster {
                 throw new IOException("Monster sheet is not a readable image.");
             }
 
-            int frameWidth = sheet.getWidth() / 16;
-            int frameHeight = sheet.getHeight() / 4;
+            int frameWidth = 96;
+            int[][] bands = {
+                {145, 260},
+                {338, 460},
+                {530, 652},
+                {738, 850}
+            };
+
             for (int row = 0; row < 4; row++) {
+                int y0 = bands[row][0];
+                int frameHeight = bands[row][1] - y0;
                 for (int directionIndex = 0; directionIndex < DIRECTION_COUNT;
                         directionIndex++) {
                     for (int frame = 0; frame < FRAME_COUNT; frame++) {
                         int column = directionIndex * FRAME_COUNT + frame;
-                        frames[row][directionIndex][frame] = sheet.getSubimage(
-                                column * frameWidth, row * frameHeight,
+                        BufferedImage cell = sheet.getSubimage(
+                                column * frameWidth, y0,
                                 frameWidth, frameHeight);
+                        frames[row][directionIndex][frame] = normalizeFrame(cell, 64);
                     }
                 }
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to load monster sprites.", e);
+            loadFallbackImages();
+        }
+    }
+
+    private BufferedImage normalizeFrame(BufferedImage source, int targetSize) {
+        int minX = source.getWidth();
+        int minY = source.getHeight();
+        int maxX = -1;
+        int maxY = -1;
+        for (int y = 0; y < source.getHeight(); y++) {
+            for (int x = 0; x < source.getWidth(); x++) {
+                if ((source.getRGB(x, y) >>> 24) != 0) {
+                    minX = Math.min(minX, x);
+                    minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x);
+                    maxY = Math.max(maxY, y);
+                }
+            }
+        }
+        if (maxX < minX || maxY < minY) {
+            return new BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_ARGB);
+        }
+
+        BufferedImage normalized = new BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_ARGB);
+        int contentWidth = maxX - minX + 1;
+        int contentHeight = maxY - minY + 1;
+        double scale = Math.min((double) targetSize / 96.0, (double) targetSize / 120.0);
+        int drawWidth = Math.max(1, (int) Math.round(contentWidth * scale));
+        int drawHeight = Math.max(1, (int) Math.round(contentHeight * scale));
+        int drawX = (targetSize - drawWidth) / 2;
+        int drawY = targetSize - drawHeight;
+
+        Graphics2D graphics = normalized.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        graphics.drawImage(source.getSubimage(minX, minY, contentWidth, contentHeight),
+                drawX, drawY, drawWidth, drawHeight, null);
+        graphics.dispose();
+        return normalized;
+    }
+
+    private void loadFallbackImages() {
+        try (InputStream stream = openResource("player/Pixel Runner Sprite Sheet.png")) {
+            BufferedImage sheet = makeTransparent(ImageIO.read(stream));
+            int[] centersX = {785, 990};
+            for (int row = 0; row < 4; row++) {
+                for (int directionIndex = 0; directionIndex < DIRECTION_COUNT;
+                        directionIndex++) {
+                    for (int frame = 0; frame < FRAME_COUNT; frame++) {
+                        int centerX = centersX[frame % centersX.length];
+                        int centerY = 120 + row * 210;
+                        BufferedImage sub = sheet.getSubimage(
+                                centerX - 100, centerY - 100, 200, 200);
+                        frames[row][directionIndex][frame] = normalizeFrame(sub, 64);
+                    }
+                }
+            }
+        } catch (IOException | RuntimeException fallbackError) {
+            throw new IllegalStateException("Unable to load monster sprites or fallback asset.",
+                    fallbackError);
         }
     }
 
@@ -107,6 +180,12 @@ public class Monster {
         Path resource = Paths.get("res", resourcePath);
         if (!Files.exists(resource)) {
             resource = Paths.get("bin", resourcePath);
+        }
+        if (!Files.exists(resource)) {
+            resource = Paths.get("Dead_End", "res", resourcePath);
+        }
+        if (!Files.exists(resource)) {
+            resource = Paths.get("Dead_End", "bin", resourcePath);
         }
         if (!Files.exists(resource)) {
             throw new IOException("Resource not found: " + resourcePath);
@@ -145,8 +224,10 @@ public class Monster {
     }
 
     private void applyPlayerAttack() {
-        if (!gp.player.isAttacking()
-                || distanceToPlayer() > gp.tileSize * 2
+        Rectangle attackHitbox = gp.player.getAttackHitbox();
+        Rectangle monsterBounds = new Rectangle(worldX, worldY, gp.tileSize, gp.tileSize);
+        if (attackHitbox == null
+                || !attackHitbox.intersects(monsterBounds)
                 || lastPlayerAttackSequence == gp.player.attackSequence) {
             return;
         }
@@ -164,6 +245,8 @@ public class Monster {
             direction = deltaY < 0 ? "up" : "down";
         }
 
+        int previousX = worldX;
+        int previousY = worldY;
         int step = 2;
         if ("up".equals(direction)) {
             worldY -= step;
@@ -174,7 +257,29 @@ public class Monster {
         } else {
             worldX += step;
         }
+        // Preserve the map branch's independent terrain/collision layer for
+        // pursuit movement; enemy animation still advances when a route is blocked.
+        if (!canStand(worldX, worldY)) {
+            worldX = previousX;
+            worldY = previousY;
+            moving = false;
+        }
         animate(WALK_ROW);
+    }
+
+    private boolean canStand(int x, int y) {
+        for (int dx : new int[] {12, 35}) {
+            for (int dy : new int[] {24, 47}) {
+                int col = Math.floorDiv(x + dx, gp.tileSize);
+                int row = Math.floorDiv(y + dy, gp.tileSize);
+                if (col < 0 || row < 0 || col >= gp.maxWorldCol || row >= gp.maxWorldRow
+                        || gp.tileM.collisionLayer[col][row] != 0
+                        || gp.tileM.tile[gp.tileM.mapTilenum[col][row]].collision) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private void startAttack() {
@@ -212,6 +317,11 @@ public class Monster {
         }
         health = Math.max(0, health - damage);
         if (health == 0) {
+            if (gp.levelM != null) {
+                String rewardClass = gp.levelM.currentLevel == 1 ? "undead"
+                        : gp.levelM.currentLevel == 2 ? "corrupted" : "sentinel";
+                gp.levelM.progression.award(persistentId, rewardClass);
+            }
             dying = true;
             attacking = false;
             animationFrame = 0;
@@ -257,13 +367,21 @@ public class Monster {
         int screenX = worldX - gp.player.worldX + gp.player.screenX;
         int screenY = worldY - gp.player.worldY + gp.player.screenY;
         int size = gp.tileSize * 2;
-        g2.drawImage(image, screenX - gp.tileSize / 2, screenY - gp.tileSize / 2,
-                size, size, null);
+        int drawX = screenX + (gp.tileSize - size) / 2;
+        int drawY = screenY + gp.tileSize - size;
+
+        Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2.drawImage(image, drawX, drawY, size, size, null);
+        if (oldInterpolation != null) {
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
+        }
 
         int barWidth = gp.tileSize;
         int barHeight = 6;
         int barX = screenX + (gp.tileSize - barWidth) / 2;
-        int barY = screenY - gp.tileSize / 2 - 8;
+        int barY = drawY - 8;
         g2.setColor(Color.DARK_GRAY);
         g2.fillRect(barX, barY, barWidth, barHeight);
         g2.setColor(Color.RED);

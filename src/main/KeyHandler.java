@@ -6,12 +6,15 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.util.HashSet;
+import java.util.Set;
 
+/**
+ * Routes movement, combat and world-map input. One-shot actions are consumed by
+ * Player or the world systems so held keys cannot restart an animation.
+ */
 public class KeyHandler implements KeyListener, FocusListener, MouseListener {
 
-    // -------------------------------------------------------------------------
-    // Movement / combat (held-state flags)
-    // -------------------------------------------------------------------------
     public boolean upPressed;
     public boolean downPressed;
     public boolean leftPressed;
@@ -20,66 +23,96 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     public boolean kickPressed;
     public boolean blockPressed;
     public boolean dodgePressed;
+    public boolean runPressed;
+    public boolean rollPressed;
 
-    // -------------------------------------------------------------------------
-    // One-shot requests (consumed after reading)
-    // -------------------------------------------------------------------------
     private boolean punchRequested;
     private boolean kickRequested;
     private boolean dodgeRequested;
-
-    // -------------------------------------------------------------------------
-    // Map toggle and escape — one-shot with held-key guard
-    // -------------------------------------------------------------------------
+    private boolean rollRequested;
+    private boolean interactRequested;
+    private boolean interactHeld;
+    private boolean saveRequested;
+    private boolean loadRequested;
+    private boolean fitRequested;
     private boolean mapToggleRequested;
     private boolean escapeRequested;
     private boolean mapKeyHeld;
     private boolean escapeKeyHeld;
 
-    // -------------------------------------------------------------------------
-    // Minimap reference (set by GamePanel after construction)
-    // -------------------------------------------------------------------------
+    private long inputOrder;
+    private long upOrder;
+    private long downOrder;
+    private long leftOrder;
+    private long rightOrder;
+    private final Set<Integer> commandHeld = new HashSet<>();
+
+    /** Set by GamePanel so a minimap click can open the atlas. */
     public Minimap minimap;
 
-    // =========================================================================
-    // KeyListener
-    // =========================================================================
-
     @Override
-    public void keyTyped(KeyEvent e) {}
+    public void keyTyped(KeyEvent e) {
+    }
 
     @Override
     public synchronized void keyPressed(KeyEvent e) {
         int code = e.getKeyCode();
-
         switch (code) {
-            case KeyEvent.VK_W -> upPressed    = true;
-            case KeyEvent.VK_S -> downPressed  = true;
-            case KeyEvent.VK_A -> leftPressed  = true;
-            case KeyEvent.VK_D -> rightPressed = true;
-
-            case KeyEvent.VK_E -> {
-                if (!kickPressed) kickRequested = true;
-                kickPressed = true;
+            case KeyEvent.VK_W -> {
+                upPressed = true;
+                upOrder = ++inputOrder;
             }
-            case KeyEvent.VK_Q -> {
-                if (!dodgePressed) dodgeRequested = true;
-                dodgePressed = true;
+            case KeyEvent.VK_S -> {
+                downPressed = true;
+                downOrder = ++inputOrder;
             }
-
-            // M — map toggle: fire once per physical press
+            case KeyEvent.VK_A -> {
+                leftPressed = true;
+                leftOrder = ++inputOrder;
+            }
+            case KeyEvent.VK_D -> {
+                rightPressed = true;
+                rightOrder = ++inputOrder;
+            }
+            case KeyEvent.VK_J -> requestPunch();
+            case KeyEvent.VK_E, KeyEvent.VK_K -> requestKick();
+            case KeyEvent.VK_Q, KeyEvent.VK_SPACE -> requestDodge();
+            case KeyEvent.VK_CONTROL -> requestRoll();
+            case KeyEvent.VK_SHIFT -> runPressed = true;
+            case KeyEvent.VK_F -> {
+                if (!interactHeld) {
+                    interactRequested = true;
+                }
+                interactHeld = true;
+            }
+            case KeyEvent.VK_F5 -> {
+                if (commandHeld.add(code)) {
+                    saveRequested = true;
+                }
+            }
+            case KeyEvent.VK_F9 -> {
+                if (commandHeld.add(code)) {
+                    loadRequested = true;
+                }
+            }
+            case KeyEvent.VK_HOME -> {
+                if (commandHeld.add(code)) {
+                    fitRequested = true;
+                }
+            }
             case KeyEvent.VK_M -> {
                 if (!mapKeyHeld) {
                     mapToggleRequested = true;
                     mapKeyHeld = true;
                 }
             }
-            // Escape — fire once per physical press
             case KeyEvent.VK_ESCAPE -> {
                 if (!escapeKeyHeld) {
                     escapeRequested = true;
                     escapeKeyHeld = true;
                 }
+            }
+            default -> {
             }
         }
     }
@@ -87,57 +120,142 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     @Override
     public synchronized void keyReleased(KeyEvent e) {
         int code = e.getKeyCode();
+        commandHeld.remove(code);
         switch (code) {
-            case KeyEvent.VK_W      -> upPressed    = false;
-            case KeyEvent.VK_S      -> downPressed  = false;
-            case KeyEvent.VK_A      -> leftPressed  = false;
-            case KeyEvent.VK_D      -> rightPressed = false;
-            case KeyEvent.VK_E      -> kickPressed  = false;
-            case KeyEvent.VK_Q      -> dodgePressed = false;
-            case KeyEvent.VK_M      -> mapKeyHeld   = false;
+            case KeyEvent.VK_W -> upPressed = false;
+            case KeyEvent.VK_S -> downPressed = false;
+            case KeyEvent.VK_A -> leftPressed = false;
+            case KeyEvent.VK_D -> rightPressed = false;
+            case KeyEvent.VK_J -> punchPressed = false;
+            case KeyEvent.VK_E, KeyEvent.VK_K -> kickPressed = false;
+            case KeyEvent.VK_Q, KeyEvent.VK_SPACE -> dodgePressed = false;
+            case KeyEvent.VK_CONTROL -> rollPressed = false;
+            case KeyEvent.VK_SHIFT -> runPressed = false;
+            case KeyEvent.VK_F -> interactHeld = false;
+            case KeyEvent.VK_M -> mapKeyHeld = false;
             case KeyEvent.VK_ESCAPE -> escapeKeyHeld = false;
+            default -> {
+            }
         }
     }
 
-    // =========================================================================
-    // One-shot consume methods
-    // =========================================================================
+    private void requestPunch() {
+        if (!punchPressed) {
+            punchRequested = true;
+        }
+        punchPressed = true;
+    }
+
+    private void requestKick() {
+        if (!kickPressed) {
+            kickRequested = true;
+        }
+        kickPressed = true;
+    }
+
+    private void requestDodge() {
+        if (!dodgePressed) {
+            dodgeRequested = true;
+        }
+        dodgePressed = true;
+    }
+
+    private void requestRoll() {
+        if (!rollPressed) {
+            rollRequested = true;
+        }
+        rollPressed = true;
+    }
 
     public synchronized boolean consumePunch() {
-        boolean v = punchRequested; punchRequested = false; return v;
+        boolean requested = punchRequested;
+        punchRequested = false;
+        return requested;
     }
 
     public synchronized boolean consumeKick() {
-        boolean v = kickRequested; kickRequested = false; return v;
+        boolean requested = kickRequested;
+        kickRequested = false;
+        return requested;
     }
 
     public synchronized boolean consumeDodge() {
-        boolean v = dodgeRequested; dodgeRequested = false; return v;
+        boolean requested = dodgeRequested;
+        dodgeRequested = false;
+        return requested;
+    }
+
+    public synchronized boolean consumeRoll() {
+        boolean requested = rollRequested;
+        rollRequested = false;
+        return requested;
+    }
+
+    public synchronized boolean consumeInteract() {
+        boolean requested = interactRequested;
+        interactRequested = false;
+        return requested;
+    }
+
+    public synchronized boolean consumeSave() {
+        boolean requested = saveRequested;
+        saveRequested = false;
+        return requested;
+    }
+
+    public synchronized boolean consumeLoad() {
+        boolean requested = loadRequested;
+        loadRequested = false;
+        return requested;
+    }
+
+    public synchronized boolean consumeFit() {
+        boolean requested = fitRequested;
+        fitRequested = false;
+        return requested;
     }
 
     public synchronized boolean consumeMapToggle() {
-        boolean v = mapToggleRequested; mapToggleRequested = false; return v;
+        boolean requested = mapToggleRequested;
+        mapToggleRequested = false;
+        return requested;
     }
 
     public synchronized boolean consumeEscape() {
-        boolean v = escapeRequested; escapeRequested = false; return v;
+        boolean requested = escapeRequested;
+        escapeRequested = false;
+        return requested;
     }
 
-    // =========================================================================
-    // MouseListener
-    // =========================================================================
+    /** The most recently pressed held direction wins, matching animation facing. */
+    public synchronized String getMovementDirection() {
+        long latest = Math.max(Math.max(upPressed ? upOrder : 0, downPressed ? downOrder : 0),
+                Math.max(leftPressed ? leftOrder : 0, rightPressed ? rightOrder : 0));
+        if (latest == upOrder && upPressed) {
+            return "up";
+        }
+        if (latest == downOrder && downPressed) {
+            return "down";
+        }
+        if (latest == leftOrder && leftPressed) {
+            return "left";
+        }
+        if (latest == rightOrder && rightPressed) {
+            return "right";
+        }
+        return null;
+    }
 
     @Override
     public synchronized void mousePressed(MouseEvent e) {
         if (e.getButton() == MouseEvent.BUTTON1) {
-            // Check if the click lands on the HUD minimap — if so, open the full map
             if (minimap != null && minimap.containsPoint(e.getX(), e.getY())) {
                 mapToggleRequested = true;
                 return;
             }
-            if (!punchPressed) punchRequested = true;
-            punchPressed = true;
+            requestPunch();
         } else if (e.getButton() == MouseEvent.BUTTON3) {
+            // Preserve the existing guard control; K/E provide the teammate kick action.
             blockPressed = true;
         }
     }
@@ -146,37 +264,42 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     public synchronized void mouseReleased(MouseEvent e) {
         if (e.getButton() == MouseEvent.BUTTON1) {
             punchPressed = false;
-            if (minimap != null) minimap.resetDrag();
+            if (minimap != null) {
+                minimap.resetDrag();
+            }
         } else if (e.getButton() == MouseEvent.BUTTON3) {
             blockPressed = false;
         }
     }
 
-    @Override public void mouseClicked(MouseEvent e)  {}
-    @Override public void mouseEntered(MouseEvent e)  {}
-    @Override public void mouseExited(MouseEvent e)   {}
-
-    // =========================================================================
-    // Input suppression
-    // =========================================================================
-
-    /**
-     * Clears all held movement and combat inputs.
-     * Call when entering a non-PLAYING state (e.g. opening the full map)
-     * so that inputs pressed before opening do not fire when gameplay resumes.
-     */
+    /** Clears held state when UI mode changes or the window loses focus. */
     public synchronized void clearAllInputs() {
-        upPressed      = false;  downPressed     = false;
-        leftPressed    = false;  rightPressed    = false;
-        punchPressed   = false;  kickPressed     = false;
-        blockPressed   = false;  dodgePressed    = false;
-        punchRequested = false;  kickRequested   = false;
+        upPressed = false;
+        downPressed = false;
+        leftPressed = false;
+        rightPressed = false;
+        punchPressed = false;
+        kickPressed = false;
+        blockPressed = false;
+        dodgePressed = false;
+        runPressed = false;
+        rollPressed = false;
+        punchRequested = false;
+        kickRequested = false;
         dodgeRequested = false;
+        rollRequested = false;
+        interactRequested = false;
+        interactHeld = false;
+        saveRequested = false;
+        loadRequested = false;
+        fitRequested = false;
+        commandHeld.clear();
+        inputOrder = 0;
+        upOrder = 0;
+        downOrder = 0;
+        leftOrder = 0;
+        rightOrder = 0;
     }
-
-    // =========================================================================
-    // FocusListener
-    // =========================================================================
 
     @Override
     public synchronized void focusLost(FocusEvent e) {
@@ -184,5 +307,18 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     }
 
     @Override
-    public void focusGained(FocusEvent e) {}
+    public void focusGained(FocusEvent e) {
+    }
+
+    @Override
+    public void mouseClicked(MouseEvent e) {
+    }
+
+    @Override
+    public void mouseEntered(MouseEvent e) {
+    }
+
+    @Override
+    public void mouseExited(MouseEvent e) {
+    }
 }

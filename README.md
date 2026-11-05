@@ -12,11 +12,22 @@ pursuit, attacks, blocking, and death animations.
 
 ## Run
 
+The connected world now uses `res/world/region1.txt` through `region3.txt`.
+Previous `res/map` files and artwork are retained. See
+[world design](docs/WORLD_DESIGN.md) and [verification report](docs/WORLD_TEST_REPORT.md).
+
+macOS/Linux, from the repository root:
+
+```sh
+javac --release 17 -d bin $(find src -name '*.java')
+java -cp bin:res main.Window
+```
+
 From the project directory:
 
 ```powershell
 javac --release 17 -d bin (Get-ChildItem -Path src -Recurse -Filter *.java).FullName
-java --module-path bin -m Myproject/main.Window
+java -cp "bin;res" main.Window
 ```
 
 The game loads assets from the `res` directory when running from the project
@@ -30,13 +41,20 @@ root. The compiled classes are written to `bin`.
 | A | Move left |
 | S | Move down |
 | D | Move right |
-| Left mouse button | Punch |
-| E | Kick |
-| Q | Dodge roll in the current movement direction |
+| J / Left mouse button | Punch |
+| E / K | Kick |
+| Q / Space | Dodge in the current movement direction |
+| Ctrl | Roll |
+| Shift | Run while moving |
 | Right mouse button | Block / guard |
+| F | Interact with a nearby ward / travel |
+| M / Escape | Open / close world atlas |
+| Scroll / drag / Home | Atlas zoom / pan / fit all |
+| F5 / F9 | Save / load `saves/world.properties` |
 
-Combat actions are edge-triggered where appropriate, so holding an attack key
-does not repeatedly start attacks. Losing window focus clears held input.
+Combat actions are edge-triggered, so holding an attack key does not restart an
+animation. The player uses direction-specific idle, walk, run, dodge, roll,
+punch, kick, hurt and death animations. Losing window focus clears held input.
 
 ## Gameplay
 
@@ -46,7 +64,27 @@ does not repeatedly start attacks. Losing window focus clears held input.
 - Blocking and dodging prevent monster attack damage.
 - Punches and kicks reduce monster health.
 - Each monster displays a health bar and plays a death animation.
-- Defeated monsters are continuously replaced after a short respawn delay.
+- Authored regions contain persistent enemy encounters; defeated enemies stay
+  defeated. Reward values and gate requirements are configurable in
+  `res/world/progression.properties`. Power is cumulative and never spent.
+- The dragon arena uses the existing proximity animation. Boss combat is not yet
+  implemented; its eventual defeat should call `LevelManager.onDragonDefeated()`.
+
+## Verification
+
+```sh
+java -Djava.awt.headless=true -cp bin:res main.WorldIntegrationTest
+```
+
+Checks navigation, rewards, gates, region state, save/load, fades and the boss
+callback. Creates actual Swing render captures in `out/world-checks/`.
+
+The merge check also exercises player animation states, directional combat
+hitboxes, monster animation rendering and the health HUD:
+
+```sh
+java -Djava.awt.headless=true -cp bin:res main.AnimationMergeIntegrationTest
+```
 
 ## Project layout
 

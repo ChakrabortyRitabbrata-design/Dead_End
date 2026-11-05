@@ -4,3 +4,4 @@ bin/
 out/
 *.class
 .DS_Store
+saves/

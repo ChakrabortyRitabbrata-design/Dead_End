@@ -287,6 +287,8 @@ public class TileManager {
         if (s != null) return s;
         Path p = Paths.get("res", resourcePath);
         if (!Files.exists(p)) p = Paths.get("bin", resourcePath);
+        if (!Files.exists(p)) p = Paths.get("Dead_End", "res", resourcePath);
+        if (!Files.exists(p)) p = Paths.get("Dead_End", "bin", resourcePath);
         if (!Files.exists(p)) throw new IOException("Resource not found: " + resourcePath);
         return Files.newInputStream(p);
     }

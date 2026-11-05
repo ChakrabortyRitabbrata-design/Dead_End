@@ -189,6 +189,17 @@ public class Minimap {
             }
         }
 
+        for(var gate:gp.tileM.currentMap.gates) {
+            int c=gate.col(),r=gate.row();
+            if(c<startCol||c>=endCol||r<startRow||r>=endRow||gp.fogOfWar.getState(c,r)==FogOfWar.UNEXPLORED) continue;
+            g2.setColor(gp.levelM.progression.unlocked(gate.id())?Color.CYAN:new Color(0xdab67c));
+            g2.fillRect(originX+(int)((c-startCol)*scaleX)-2,originY+(int)((r-startRow)*scaleY)-2,5,5);
+        }
+        for(var location:gp.tileM.currentMap.landmarks) {
+            int c=location.col(),r=location.row();
+            if(c<startCol||c>=endCol||r<startRow||r>=endRow||gp.fogOfWar.getState(c,r)==FogOfWar.UNEXPLORED) continue;
+            g2.setColor(new Color(0xd9d0b3));g2.drawRect(originX+(int)((c-startCol)*scaleX)-2,originY+(int)((r-startRow)*scaleY)-2,4,4);
+        }
         // --- Player marker ---
         float markerX = (playerCol - startCol) * scaleX;
         float markerY = (playerRow - startRow) * scaleY;
@@ -227,6 +238,9 @@ public class Minimap {
     // =========================================================================
 
     public void drawFullMap(Graphics2D g2) {
+        if(gp.tileM.currentMap.authoredWorld) {
+            gp.worldRenderer.drawAtlas(g2,fullZoom,fullPanX,fullPanY);return;
+        }
         // Dark (but not fully opaque) background — terrain shows through the overlay
         // The map itself is drawn below, so a darker background is fine here.
         g2.setColor(new Color(0, 0, 0, 180));
@@ -366,6 +380,11 @@ public class Minimap {
     private Color tileColor(int col, int row) {
         int tileId   = gp.tileM.mapTilenum[col][row];
         int fogState = gp.fogOfWar.getState(col, row);
+        if(gp.tileM.currentMap.authoredWorld) {
+            if(fogState==FogOfWar.UNEXPLORED) return new Color(0x17222b);
+            Color base=WorldRenderer.color(gp.levelM.currentLevel,tileId);
+            return fogState==FogOfWar.VISIBLE?base:dim(base,0.6);
+        }
 
         // Guard against out-of-range tile IDs
         if (tileId < 0 || tileId >= MAX_TILE_IDS) tileId = 0;

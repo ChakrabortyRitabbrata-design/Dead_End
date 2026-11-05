@@ -4,6 +4,9 @@ import javax.swing.JFrame;
 
 public class Window {
     public static void main(String[] args) {
+        javax.swing.SwingUtilities.invokeLater(Window::open);
+    }
+    private static void open() {
 
         JFrame frame = new JFrame();
 

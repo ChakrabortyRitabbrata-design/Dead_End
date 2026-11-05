@@ -48,6 +48,8 @@ public class MapLoader {
      * Throws IllegalStateException if any mandatory file is missing or malformed.
      */
     public static MapData loadLevel(int levelId) throws IOException {
+        if (Files.exists(Path.of("res/world/region" + levelId + ".txt")))
+            return WorldDefinition.load(levelId);
         // Read meta first so we know mapWidth / mapHeight before reading layers
         MapData data = readMeta(levelId);
         readGroundLayer(levelId, data);

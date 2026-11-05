@@ -65,6 +65,7 @@ public class GamePanel extends JPanel implements Runnable {
     public Minimap        minimap;
     public LevelManager   levelM;
     public DecorRenderer  decorR;
+    public WorldRenderer worldRenderer;
 
     // =========================================================================
     // World objects
@@ -92,6 +93,8 @@ public class GamePanel extends JPanel implements Runnable {
 
     int FPS = 60;
     Thread gameThread;
+    private long lastUpdateNanos;
+    private javax.swing.Timer gameTimer;
 
     // =========================================================================
     // Construction
@@ -113,8 +116,11 @@ public class GamePanel extends JPanel implements Runnable {
         levelM   = new LevelManager(this);
 
         // Build the decor/vegetation renderer from the loaded map
-        decorR = new DecorRenderer(this);
-        decorR.buildDecorList();
+        if (!tileM.currentMap.authoredWorld) {
+            decorR = new DecorRenderer(this);
+            decorR.buildDecorList();
+        }
+        worldRenderer = new WorldRenderer(this);
 
         // Wire minimap reference into keyH so click detection works
         keyH.minimap = minimap;
@@ -155,8 +161,18 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     public void startGameThread() {
-        gameThread = new Thread(this);
-        gameThread.start();
+        // Update, region swaps, and paint all run on Swing's EDT.
+        if (gameTimer != null && gameTimer.isRunning()) return;
+        lastUpdateNanos = System.nanoTime();
+        gameTimer = new javax.swing.Timer(1000 / FPS, e -> {
+            long now = System.nanoTime();
+            long deltaNanos = now - lastUpdateNanos;
+            lastUpdateNanos = now;
+            update(deltaNanos);
+            repaint();
+        });
+        gameTimer.setCoalesce(true);
+        gameTimer.start();
     }
 
     // =========================================================================
@@ -168,8 +184,12 @@ public class GamePanel extends JPanel implements Runnable {
         double drawInterval = 1_000_000_000.0 / FPS;
         long nextDrawTime   = System.nanoTime() + (long) drawInterval;
 
+        lastUpdateNanos = System.nanoTime();
         while (gameThread != null) {
-            update();
+            long now = System.nanoTime();
+            long deltaNanos = now - lastUpdateNanos;
+            lastUpdateNanos = now;
+            update(deltaNanos);
             repaint();
 
             try {
@@ -188,6 +208,19 @@ public class GamePanel extends JPanel implements Runnable {
     // =========================================================================
 
     public void update() {
+        update(16_666_667L);
+    }
+
+    /** Delta-time update used by the animation controller. */
+    public void update(long deltaNanos) {
+        if (keyH.consumeFit()) minimap.resetFullMapView();
+        boolean save=keyH.consumeSave(), load=keyH.consumeLoad();
+        if (gameState != GameState.LEVEL_TRANSITION && (save || load)) {
+            try {
+                if(load) levelM.load(java.nio.file.Path.of("saves/world.properties"));
+                else levelM.save(java.nio.file.Path.of("saves/world.properties"));
+            } catch (java.io.IOException e) {levelM.notifyPlayer(e.getMessage());}
+        }
         // --- Input routing (works in ALL states) ---
         if (keyH.consumeMapToggle())                          toggleFullMap();
         if (keyH.consumeEscape() && gameState == GameState.FULL_MAP) toggleFullMap();
@@ -205,7 +238,14 @@ public class GamePanel extends JPanel implements Runnable {
         fogOfWar.update(player.worldX / tileSize, player.worldY / tileSize);
 
         // --- Entities ---
-        player.update();
+        player.update(deltaNanos);
+        updateCamera();
+
+        if (player.isDead()) {
+            keyH.clearAllInputs();
+            if (player.isDeathAnimationFinished()) gameState = GameState.GAME_OVER;
+            return;
+        }
 
         if (dragonActive && dragon != null) dragon.update();
 
@@ -228,12 +268,15 @@ public class GamePanel extends JPanel implements Runnable {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
+        updateCamera();
 
         // --- World (ground tiles) ---
-        tileM.draw(g2);
+        if (tileM.currentMap.authoredWorld) worldRenderer.drawGround(g2);
+        else tileM.draw(g2);
 
         // --- Ground-level decor (grass tufts, small rocks, logs) ---
         if (decorR != null) decorR.drawBelowPlayer(g2);
+        if (tileM.currentMap.authoredWorld) worldRenderer.drawObjects(g2, false);
 
         // --- Objects (houses, wells, etc.) ---
         for (SuperObject obj : objects) {
@@ -244,6 +287,8 @@ public class GamePanel extends JPanel implements Runnable {
         if (dragonActive && dragon != null) dragon.draw(g2);
         for (Monster m : monsters) m.draw(g2);
         player.draw(g2);
+        if (tileM.currentMap.authoredWorld) worldRenderer.drawObjects(g2, true);
+        if (tileM.currentMap.authoredWorld) worldRenderer.drawHud(g2);
 
         // --- Tall decor above player (trees, bushes — Y-sorted) ---
         if (decorR != null) decorR.drawAbovePlayer(g2);
@@ -252,6 +297,8 @@ public class GamePanel extends JPanel implements Runnable {
         if (gameState == GameState.PLAYING || gameState == GameState.FULL_MAP) {
             minimap.drawHUD(g2);
         }
+
+        drawPlayerHealthBar(g2);
 
         // --- Full-screen map overlay ---
         if (gameState == GameState.FULL_MAP) {
@@ -277,6 +324,29 @@ public class GamePanel extends JPanel implements Runnable {
         g2.dispose();
     }
 
+    /** Screen-fixed player health bar from the combat/animation contribution. */
+    private void drawPlayerHealthBar(Graphics2D g2) {
+        int barWidth = 180;
+        int barHeight = 14;
+        int x = 24;
+        int y = 122;
+        int maxHealth = player.getMaxHealth();
+        int health = Math.max(0, Math.min(maxHealth, player.getHealth()));
+        int fillWidth = barWidth * health / maxHealth;
+
+        g2.setColor(new Color(0, 0, 0, 185));
+        g2.fillRoundRect(x - 8, y - 24, barWidth + 16, barHeight + 31, 8, 8);
+        g2.setColor(new Color(232, 224, 194));
+        g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        g2.drawString("HP " + health + "/" + maxHealth, x, y - 7);
+        g2.setColor(new Color(63, 42, 43));
+        g2.fillRect(x, y, barWidth, barHeight);
+        g2.setColor(new Color(195, 47, 45));
+        g2.fillRect(x, y, fillWidth, barHeight);
+        g2.setColor(new Color(239, 224, 191));
+        g2.drawRect(x, y, barWidth, barHeight);
+    }
+
     private void drawEndScreen(Graphics2D g2, String text, Color color) {
         g2.setColor(new Color(0, 0, 0, 180));
         g2.fillRect(0, 0, screenWidth, screenHeight);
@@ -287,7 +357,7 @@ public class GamePanel extends JPanel implements Runnable {
                 screenHeight / 2 - fm.getHeight() / 2 + fm.getAscent());
         g2.setFont(new Font("Arial", Font.PLAIN, 16));
         g2.setColor(Color.WHITE);
-        String sub = "Score: " + score;
+        String sub = "Score: " + levelM.progression.score();
         fm = g2.getFontMetrics();
         g2.drawString(sub, (screenWidth - fm.stringWidth(sub)) / 2,
                 screenHeight / 2 + 40);
@@ -314,18 +384,24 @@ public class GamePanel extends JPanel implements Runnable {
 
     public void spawnMonstersForLevel() {
         monsters.clear();
+        random.setSeed(7103L * levelM.currentLevel);
         monsterRespawnCounter = MONSTER_RESPAWN_DELAY;
 
         if (tileM.currentMap == null) return;
+        int regionIndex=0;
         for (MapData.EnemyRegion region : tileM.currentMap.enemyRegions) {
             for (int i = 0; i < region.maxCount(); i++) {
-                spawnMonsterInRegion(region);
+                String id=levelM.currentLevel+"-"+regionIndex+"-"+i;
+                if(levelM.progression.rewarded(id)) continue;
+                int before=monsters.size();spawnMonsterInRegion(region);
+                if(monsters.size()>before) monsters.get(before).persistentId=id;
             }
+            regionIndex++;
         }
     }
 
     private void spawnMonsterInRegion(MapData.EnemyRegion region) {
-        for (int attempt = 0; attempt < 10; attempt++) {
+        for (int attempt = 0; attempt < 200; attempt++) {
             double angle = random.nextDouble() * 2 * Math.PI;
             double dist  = Math.sqrt(random.nextDouble()) * region.radius();
             int col = region.centerCol() + (int)(Math.cos(angle) * dist);
@@ -364,6 +440,7 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void replenishMonsters() {
+        if (tileM.currentMap != null && tileM.currentMap.authoredWorld) return;
         if (tileM.currentMap == null || tileM.currentMap.enemyRegions.isEmpty()) return;
 
         int totalMax = tileM.currentMap.enemyRegions.stream()
@@ -393,6 +470,11 @@ public class GamePanel extends JPanel implements Runnable {
             player.worldX = spawn[0] * tileSize;
             player.worldY = spawn[1] * tileSize;
         }
+    }
+    public void updateCamera() {
+        int cameraX=Math.max(0,Math.min(worldWidth-screenWidth,player.worldX-screenWidth/2+tileSize/2));
+        int cameraY=Math.max(0,Math.min(worldHeight-screenHeight,player.worldY-screenHeight/2+tileSize/2));
+        player.screenX=player.worldX-cameraX;player.screenY=player.worldY-cameraY;
     }
 
     private void activateDragonFromMap() {

@@ -11,6 +11,9 @@ import java.util.List;
  * matching the existing TileManager convention.
  */
 public class MapData {
+    public boolean authoredWorld;
+    public final List<WorldDefinition.Gate> gates = new ArrayList<>();
+    public final List<WorldDefinition.Landmark> landmarks = new ArrayList<>();
 
     // -------------------------------------------------------------------------
     // Core dimensions
