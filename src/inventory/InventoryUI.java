@@ -88,7 +88,7 @@ public class InventoryUI {
     private String statusMessage = null;
     private int statusTimer = 0;
 
-    // ── Visibility ────────────────────────────────────────────────────────────
+    // ── Visibility ────────────────────────────────────────────────────
     private boolean visible = false;
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -318,100 +318,19 @@ public class InventoryUI {
         g2.setColor(new Color(10, 11, 15, 220));
         g2.fillOval(px + pw / 2 - 36, py + ph - 24, 72, 16);
 
-        // Character Sprite
+        // Character Sprite & Layered Equipment
         int charSize = 72;
         int charX = px + (pw - charSize) / 2;
         int charY = py + (ph - charSize) / 2 - 4;
 
-        BufferedImage sprite = (gamePanel != null && gamePanel.player != null)
-                ? gamePanel.player.getPlayerPreviewImage() : null;
-        if (sprite != null) {
-            g2.drawImage(sprite, charX, charY, charSize, charSize, null);
-        }
-
-        int cx = charX + charSize / 2;
-
-        // 1. Off-Hand Shield (left of character)
-        Item offHand = equipmentManager.getEquipped(EquipmentSlot.OFF_HAND);
-        if (offHand != null) {
-            int shX = charX - 2;
-            int shY = charY + charSize / 2 - 4;
-            int sw = 16, sh = 22;
-            g2.setColor(new Color(160, 180, 205));
-            int[] xs = { shX + sw / 2, shX, shX, shX + sw, shX + sw };
-            int[] ys = { shY + sh, shY + 4, shY, shY, shY + 4 };
-            g2.fillPolygon(xs, ys, 5);
-            g2.setColor(new Color(220, 180, 60));
-            g2.fillOval(shX + sw / 2 - 2, shY + sh / 2 - 3, 5, 5);
-            g2.setColor(new Color(70, 90, 120));
-            g2.drawPolygon(xs, ys, 5);
-        }
-
-        // 2. Head Armor (Helmet)
-        Item head = equipmentManager.getEquipped(EquipmentSlot.HEAD);
-        if (head != null) {
-            int topY = charY + (int) (charSize * 0.16);
-            int hw   = (int) (charSize * 0.30);
-            int hh   = (int) (charSize * 0.22);
-            g2.setColor(new Color(170, 190, 215, 230));
-            g2.fillArc(cx - hw / 2, topY, hw, hh, 0, 180);
-            g2.setColor(new Color(80, 95, 120, 240));
-            g2.fillRect(cx - hw / 2 - 1, topY + hh / 2 - 2, hw + 2, 4);
-            g2.setColor(new Color(15, 20, 30, 250));
-            g2.fillRect(cx - hw / 4, topY + hh / 2 - 1, hw / 2, 2);
-        }
-
-        // 3. Chest Armor (Chestplate)
-        Item chest = equipmentManager.getEquipped(EquipmentSlot.CHEST);
-        if (chest != null) {
-            int cy = charY + (int) (charSize * 0.38);
-            int cw = (int) (charSize * 0.34);
-            int ch = (int) (charSize * 0.24);
-            g2.setColor(new Color(155, 175, 200, 220));
-            g2.fillRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
-            g2.setColor(new Color(75, 90, 115, 230));
-            g2.drawRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
-            g2.setColor(new Color(130, 150, 180, 230));
-            g2.fillOval(cx - cw / 2 - 3, cy, 7, 7);
-            g2.fillOval(cx + cw / 2 - 4, cy, 7, 7);
-        }
-
-        // 4. Legs Armor (Leggings)
-        Item legs = equipmentManager.getEquipped(EquipmentSlot.LEGS);
-        if (legs != null) {
-            int ly  = charY + (int) (charSize * 0.62);
-            int lw  = (int) (charSize * 0.13);
-            int lh  = (int) (charSize * 0.18);
-            int gap = (int) (charSize * 0.04);
-            g2.setColor(new Color(140, 160, 185, 220));
-            g2.fillRoundRect(cx - lw - gap / 2, ly, lw, lh, 4, 4);
-            g2.fillRoundRect(cx + gap / 2, ly, lw, lh, 4, 4);
-            g2.setColor(new Color(80, 95, 120, 230));
-            g2.fillRect(cx - lw - gap / 2, ly, lw * 2 + gap, 3);
-        }
-
-        // 5. Feet Armor (Boots)
-        Item feet = equipmentManager.getEquipped(EquipmentSlot.FEET);
-        if (feet != null) {
-            int by   = charY + (int) (charSize * 0.80);
-            int bw   = (int) (charSize * 0.14);
-            int bh   = (int) (charSize * 0.11);
-            int bgap = (int) (charSize * 0.04);
-            g2.setColor(new Color(70, 80, 95, 240));
-            g2.fillRoundRect(cx - bw - bgap / 2, by, bw, bh, 4, 4);
-            g2.fillRoundRect(cx + bgap / 2, by, bw, bh, 4, 4);
-            g2.setColor(new Color(175, 195, 220, 240));
-            g2.fillRect(cx - bw - bgap / 2, by + bh - 3, bw, 3);
-            g2.fillRect(cx + bgap / 2, by + bh - 3, bw, 3);
-        }
-
-        // 6. Main Hand Weapon (right of character)
-        Item mainHand = equipmentManager.getEquipped(EquipmentSlot.MAIN_HAND);
-        if (mainHand instanceof Weapon w) {
-            int wX = charX + charSize - 10;
-            int wY = charY + charSize / 2 - 8;
-            BufferedImage icon = w.getIcon(24);
-            g2.drawImage(icon, wX, wY, 24, 24, null);
+        if (gamePanel != null && gamePanel.player != null && gamePanel.player.getEquipmentRenderer() != null) {
+            gamePanel.player.getEquipmentRenderer().renderPreview(g2, equipmentManager, charX, charY, charSize);
+        } else {
+            BufferedImage sprite = (gamePanel != null && gamePanel.player != null)
+                    ? gamePanel.player.getPlayerPreviewImage() : null;
+            if (sprite != null) {
+                g2.drawImage(sprite, charX, charY, charSize, charSize, null);
+            }
         }
 
         // Label at top of preview

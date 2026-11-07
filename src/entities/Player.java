@@ -68,7 +68,10 @@ public class Player extends Entity {
     private int rollDistanceRemaining;
     private boolean attackHitApplied;
 
-    // ── Weapon Renderer & Equipment ───────────────────────────────────────────
+    // ── Layered Sprite & Equipment Architecture ──────────────────────────────
+    private final CharacterSpriteManager spriteManager;
+    private final EquipmentRenderer equipmentRenderer;
+    private final WeaponAnimation weaponAnimation;
     private final WeaponRenderer weaponRenderer;
 
     public Player(GamePanel gp, KeyHandler keyH) {
@@ -78,6 +81,9 @@ public class Player extends Entity {
         screenY = gp.screenHeight / 2 - gp.tileSize / 2;
         solidArea = new Rectangle(8, 16, 32, 32);
 
+        spriteManager = new CharacterSpriteManager();
+        equipmentRenderer = new EquipmentRenderer(spriteManager);
+        weaponAnimation = new WeaponAnimation(spriteManager);
         weaponRenderer = new WeaponRenderer(gp);
 
         setDefaultValues();
@@ -337,6 +343,18 @@ public class Player extends Entity {
         return null;
     }
 
+    public EquipmentRenderer getEquipmentRenderer() {
+        return equipmentRenderer;
+    }
+
+    public CharacterSpriteManager getSpriteManager() {
+        return spriteManager;
+    }
+
+    public WeaponAnimation getWeaponAnimation() {
+        return weaponAnimation;
+    }
+
     // ── Update ────────────────────────────────────────────────────────────────
 
     public void update() {
@@ -350,7 +368,10 @@ public class Player extends Entity {
         damageInvulnerabilityNanos = Math.max(0, damageInvulnerabilityNanos - delta);
         hurtRemainingNanos = Math.max(0, hurtRemainingNanos - delta);
 
-        // Update weapon animation ticks
+        // Update weapon animation systems
+        if (weaponAnimation != null) {
+            weaponAnimation.update(delta);
+        }
         if (weaponRenderer != null) {
             weaponRenderer.update();
         }
@@ -374,8 +395,9 @@ public class Player extends Entity {
         if (attackRequested && attackCooldownNanos == 0) {
             keyH.attackPressed = false;
             if (equipped != null) {
-                if (weaponRenderer != null && !weaponRenderer.isAttacking()) {
-                    weaponRenderer.startAttack(equipped);
+                if (weaponAnimation != null && !weaponAnimation.isAttacking()) {
+                    weaponAnimation.startAttack(equipped, facing);
+                    if (weaponRenderer != null) weaponRenderer.startAttack(equipped);
                     attackSequence++;
                     attackCooldownNanos = 250_000_000L;
                 }
@@ -569,6 +591,9 @@ public class Player extends Entity {
     }
 
     public boolean isAttacking() {
+        if (weaponAnimation != null && weaponAnimation.isAttacking()) {
+            return true;
+        }
         if (weaponRenderer != null && weaponRenderer.isAttacking()) {
             return true;
         }
@@ -594,7 +619,7 @@ public class Player extends Entity {
 
     public int getAttackDamage() {
         Weapon equipped = getEquippedWeapon();
-        if (equipped != null && weaponRenderer != null && weaponRenderer.isAttacking()) {
+        if (equipped != null && isAttacking()) {
             return equipped.damage;
         }
         return state == AnimationState.KICK ? 20 : 10;
@@ -638,154 +663,50 @@ public class Player extends Entity {
     // ── Render ────────────────────────────────────────────────────────────────
 
     public void draw(Graphics2D g2) {
-        BufferedImage image = animationController.getCurrentFrame().getImage();
         int drawSize = gp.tileSize * 2;
         int drawX = screenX + (gp.tileSize - drawSize) / 2;
         int drawY = screenY + gp.tileSize - drawSize;
-        Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
-        if (oldInterpolation != null) {
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
-        }
 
         String dir = directionName(facing);
 
-        // 2. Draw off-hand item (shield)
-        drawOffHand(g2, screenX, screenY, dir);
-
-        // 3. Draw armor overlays (helmet, chestplate, leggings, boots)
-        drawArmorOverlays(g2, drawX, drawY, drawSize, dir);
-
-        // 4. Draw equipped weapon in hand
-        weaponRenderer.draw(g2, screenX, screenY, dir, getEquippedWeapon());
-    }
-
-    private void drawArmorOverlays(Graphics2D g2, int drawX, int drawY, int drawSize, String dir) {
-        if (gp == null || gp.equipmentManager == null) return;
-
-        int cx = drawX + drawSize / 2;
-        if ("left".equals(dir))  cx -= 2;
-        if ("right".equals(dir)) cx += 2;
-
-        // ── 1. Head (Helmet) ──────────────────────────────────────────────────
-        Item head = gp.equipmentManager.getEquipped(EquipmentSlot.HEAD);
-        if (head != null) {
-            int topY = drawY + (int) (drawSize * 0.16);
-            int hw   = (int) (drawSize * 0.28);
-            int hh   = (int) (drawSize * 0.22);
-
-            g2.setColor(new Color(170, 190, 215, 230));
-            g2.fillArc(cx - hw / 2, topY, hw, hh, 0, 180);
-            g2.setColor(new Color(80, 95, 120, 240));
-            g2.setStroke(new BasicStroke(1.5f));
-            g2.drawArc(cx - hw / 2, topY, hw, hh, 0, 180);
-            // Visor brim
-            g2.fillRect(cx - hw / 2 - 1, topY + hh / 2 - 2, hw + 2, 4);
-            if (!"up".equals(dir)) {
-                // Eye slit
-                g2.setColor(new Color(15, 20, 30, 250));
-                g2.fillRect(cx - hw / 4, topY + hh / 2 - 1, hw / 2, 2);
-            }
-            g2.setStroke(new BasicStroke(1f));
-        }
-
-        // ── 2. Chest (Chestplate) ─────────────────────────────────────────────
-        Item chest = gp.equipmentManager.getEquipped(EquipmentSlot.CHEST);
-        if (chest != null) {
-            int cy = drawY + (int) (drawSize * 0.38);
-            int cw = (int) (drawSize * 0.32);
-            int ch = (int) (drawSize * 0.24);
-
-            g2.setColor(new Color(155, 175, 200, 220));
-            g2.fillRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
-            g2.setColor(new Color(75, 90, 115, 230));
-            g2.setStroke(new BasicStroke(1.5f));
-            g2.drawRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
-            // Pauldrons (shoulders)
-            g2.setColor(new Color(130, 150, 180, 230));
-            g2.fillOval(cx - cw / 2 - 4, cy, 8, 8);
-            g2.fillOval(cx + cw / 2 - 4, cy, 8, 8);
-            g2.setStroke(new BasicStroke(1f));
-        }
-
-        // ── 3. Legs (Leggings) ────────────────────────────────────────────────
-        Item legs = gp.equipmentManager.getEquipped(EquipmentSlot.LEGS);
-        if (legs != null) {
-            int ly  = drawY + (int) (drawSize * 0.62);
-            int lw  = (int) (drawSize * 0.12);
-            int lh  = (int) (drawSize * 0.18);
-            int gap = (int) (drawSize * 0.04);
-
-            g2.setColor(new Color(140, 160, 185, 220));
-            g2.fillRoundRect(cx - lw - gap / 2, ly, lw, lh, 4, 4);
-            g2.fillRoundRect(cx + gap / 2, ly, lw, lh, 4, 4);
-            // Waist guard
-            g2.setColor(new Color(80, 95, 120, 230));
-            g2.fillRect(cx - lw - gap / 2, ly, lw * 2 + gap, 3);
-        }
-
-        // ── 4. Feet (Boots) ───────────────────────────────────────────────────
-        Item feet = gp.equipmentManager.getEquipped(EquipmentSlot.FEET);
-        if (feet != null) {
-            int by   = drawY + (int) (drawSize * 0.80);
-            int bw   = (int) (drawSize * 0.13);
-            int bh   = (int) (drawSize * 0.11);
-            int bgap = (int) (drawSize * 0.04);
-
-            g2.setColor(new Color(70, 80, 95, 240));
-            g2.fillRoundRect(cx - bw - bgap / 2, by, bw, bh, 4, 4);
-            g2.fillRoundRect(cx + bgap / 2, by, bw, bh, 4, 4);
-            // Steel toe caps
-            g2.setColor(new Color(175, 195, 220, 240));
-            g2.fillRect(cx - bw - bgap / 2, by + bh - 3, bw, 3);
-            g2.fillRect(cx + bgap / 2, by + bh - 3, bw, 3);
-        }
-    }
-
-    private void drawOffHand(Graphics2D g2, int px, int py, String dir) {
-        if (gp == null || gp.equipmentManager == null) return;
-        Item offHand = gp.equipmentManager.getEquipped(EquipmentSlot.OFF_HAND);
-        if (offHand == null) return;
-
-        int ts = gp.tileSize;
-        int sx, sy;
-        int sw = 18, sh = 24;
-
-        if (isBlocking()) {
-            // Shield held up in front while blocking
-            sx = px + ts / 2 - sw / 2;
-            sy = py + ts / 2 - sh / 2;
+        if (weaponAnimation != null && weaponAnimation.isAttacking()) {
+            // Weapon attack animation with synchronized weapon swing, effects, and armor overlays
+            weaponAnimation.drawAttack(g2, drawX, drawY, drawSize, facing);
+            // Draw armor overlays over the attacking character
+            equipmentRenderer.render(g2, gp.equipmentManager, AnimationState.IDLE, facing, 0, drawX, drawY, drawSize);
         } else {
-            // Resting on off-hand side
-            switch (dir) {
-                case "up"    -> { sx = px + 6;           sy = py + ts / 2 - 4; }
-                case "down"  -> { sx = px + 4;           sy = py + ts / 2; }
-                case "left"  -> { sx = px + ts - sw - 4; sy = py + ts / 2; }
-                default      -> { sx = px + 4;           sy = py + ts / 2; } // right
+            // Check if we can use our production layered renderer
+            BufferedImage customBase = spriteManager.getBaseFrame(state, facing, animationController.getFrameIndex());
+            if (customBase != null) {
+                equipmentRenderer.render(g2, gp.equipmentManager, state, facing,
+                        animationController.getFrameIndex(), drawX, drawY, drawSize);
+            } else {
+                // Fallback to legacy sheet frame if custom base is not ready
+                BufferedImage image = animationController.getCurrentFrame().getImage();
+                Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                        RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
+                if (oldInterpolation != null) {
+                    g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
+                }
+                // Render equipment overlays on top
+                equipmentRenderer.render(g2, gp.equipmentManager, state, facing,
+                        animationController.getFrameIndex(), drawX, drawY, drawSize);
+            }
+
+            // Draw held weapon (idle state)
+            Weapon equipped = getEquippedWeapon();
+            if (equipped != null && weaponRenderer != null) {
+                weaponRenderer.draw(g2, screenX, screenY, dir, equipped);
             }
         }
-
-        // Shield body
-        g2.setColor(new Color(160, 180, 205));
-        int[] xs = { sx + sw / 2, sx, sx, sx + sw, sx + sw };
-        int[] ys = { sy + sh, sy + 4, sy, sy, sy + 4 };
-        g2.fillPolygon(xs, ys, 5);
-
-        // Center boss
-        g2.setColor(new Color(220, 180, 60));
-        g2.fillOval(sx + sw / 2 - 3, sy + sh / 2 - 4, 6, 6);
-
-        // Rim
-        g2.setColor(new Color(70, 90, 120));
-        g2.setStroke(new BasicStroke(1.5f));
-        g2.drawPolygon(xs, ys, 5);
-        g2.setStroke(new BasicStroke(1f));
     }
 
     public BufferedImage getPlayerPreviewImage() {
         try {
+            BufferedImage preview = spriteManager.getBaseFrame(AnimationState.IDLE, Direction.DOWN, 0);
+            if (preview != null) return preview;
             if (animations != null && animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()] != null) {
                 return animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()].getFrame(0).getImage();
             }
