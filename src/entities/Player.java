@@ -1,5 +1,12 @@
 package entities;
 
+import animation.Animation;
+import animation.AnimationController;
+import animation.AnimationFrame;
+import animation.AnimationState;
+import animation.Direction;
+import animation.Hitbox;
+import animation.SpriteSheetMapping;
 import main.GamePanel;
 import main.KeyHandler;
 import inventory.EquipmentSlot;
@@ -10,6 +17,7 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,74 +27,61 @@ import java.nio.file.Paths;
 import javax.imageio.ImageIO;
 
 public class Player extends Entity {
+    public static final long IDLE_FRAME = 150_000_000L;
+    public static final long WALK_FRAME = 110_000_000L;
+    public static final long RUN_FRAME = 75_000_000L;
+    public static final long PUNCH_FRAME = 90_000_000L;
+    public static final long KICK_FRAME = 100_000_000L;
+    public static final long DODGE_FRAME = 75_000_000L;
+    public static final long ROLL_FRAME = 90_000_000L;
+    public static final long HURT_FRAME = 100_000_000L;
+    public static final long DIE_FRAME = 150_000_000L;
+    public static final long DODGE_COOLDOWN_NANOS = 450_000_000L;
+    private static final long DAMAGE_INVULNERABILITY_NANOS = 500_000_000L;
+    private static final long HURT_LOCK_NANOS = 140_000_000L;
+    public static final int DODGE_DISTANCE_TILES = 2;
+    public static final int DODGE_SPEED = 8;
+    private static final int ROLL_DISTANCE = 3;
+    private static final int ROLL_SPEED = 6;
 
-    private static final String IDLE = "IDLE";
-    private static final float PLAYER_RENDER_SCALE = 1.6f;
-    private static final float IDLE_RENDER_SCALE = 2.4f;
-    private static final int DIRECTION_COUNT = 4;
-    private static final int ACTION_COUNT = 4;
-
-    // Direction order: up, right, down, left.
-    private static final int UP = 0;
-    private static final int RIGHT = 1;
-    private static final int DOWN = 2;
-    private static final int LEFT = 3;
-
-    // Combat action order: punch, kick, block, dodge.
-    private static final int PUNCH = 0;
-    private static final int KICK = 1;
-    private static final int BLOCK = 2;
-    private static final int DODGE = 3;
-    private static final int[] COMBAT_FRAME_COUNTS = {3, 3, 3, 4};
-    private static final int ROLL_DISTANCE_TILES = 3;
-    private static final int ROLL_STEP = 6;
-
-    /*
-     * The source sheet contains a label column followed by four direction
-     * columns. The row and column boundaries are the visible grid lines in
-     * Pixel Art RPG Combat Sprite Sheet.png.
-     */
-    private static final int[] SHEET_COLUMN_STARTS = {216, 567, 906, 1220};
-    private static final int[] SHEET_COLUMN_ENDS = {565, 904, 1218, 1527};
-    private static final int[] SHEET_ROW_STARTS = {15, 261, 413, 581, 745};
-    private static final int[] SHEET_ROW_ENDS = {259, 411, 579, 743, 967};
-
-    GamePanel gp;
-    KeyHandler keyH;
+    private final GamePanel gp;
+    private final KeyHandler keyH;
+    private final AnimationController animationController = new AnimationController();
+    private final Animation[][] animations =
+            new Animation[Direction.values().length][AnimationState.values().length];
 
     public final int screenX;
     public final int screenY;
+    public String actionState = AnimationState.IDLE.name();
+    public int combatFrameIndex;
+    public int attackSequence;
 
-    public String actionState = IDLE;
-    public int combatCounter = 0;
-    public int combatFrameIndex = 0;
-    public int attackSequence = 0;
+    private AnimationState state = AnimationState.IDLE;
+    private Direction facing = Direction.UP;
+    private Direction actionDirection = Direction.UP;
     private int health = 100;
-    private int idleCounter = 0;
-    private int idleFrameIndex = 0;
-    private int rollDistanceRemaining = 0;
-    private String rollDirection = "down";
+    private long attackCooldownNanos;
+    private long dodgeCooldownNanos;
+    private long damageInvulnerabilityNanos;
+    private long hurtRemainingNanos;
+    private int dodgeDistanceRemaining;
+    private int rollDistanceRemaining;
+    private boolean attackHitApplied;
 
     // ── Weapon Renderer & Equipment ───────────────────────────────────────────
     private final WeaponRenderer weaponRenderer;
 
-    private final BufferedImage[][][] combatFrames =
-            new BufferedImage[DIRECTION_COUNT][ACTION_COUNT][];
-
     public Player(GamePanel gp, KeyHandler keyH) {
         this.gp = gp;
         this.keyH = keyH;
-
         screenX = gp.screenWidth / 2 - gp.tileSize / 2;
         screenY = gp.screenHeight / 2 - gp.tileSize / 2;
-
         solidArea = new Rectangle(8, 16, 32, 32);
 
         weaponRenderer = new WeaponRenderer(gp);
 
         setDefaultValues();
-        getPlayerImages();
-        getCombatImages();
+        loadAnimations();
     }
 
     public void setDefaultValues() {
@@ -94,98 +89,219 @@ public class Player extends Entity {
         worldY = gp.tileSize * 90;
         speed = 4;
         direction = "up";
+        facing = Direction.UP;
+        actionDirection = Direction.UP;
     }
 
-    public void getPlayerImages() {
+    private void loadAnimations() {
         try {
-            BufferedImage sheet = readImage("player/player_walk_strip.png");
-            int frameWidth = sheet.getWidth() / 4;
-            int frameHeight = sheet.getHeight() / 4;
-
-            down1 = sheet.getSubimage(0, 0, frameWidth, frameHeight);
-            down2 = sheet.getSubimage(frameWidth, 0, frameWidth, frameHeight);
-            up1 = sheet.getSubimage(0, frameHeight, frameWidth, frameHeight);
-            up2 = sheet.getSubimage(frameWidth, frameHeight, frameWidth, frameHeight);
-            left1 = sheet.getSubimage(0, frameHeight * 2, frameWidth, frameHeight);
-            left2 = sheet.getSubimage(frameWidth, frameHeight * 2, frameWidth, frameHeight);
-            right1 = sheet.getSubimage(0, frameHeight * 3, frameWidth, frameHeight);
-            right2 = sheet.getSubimage(frameWidth, frameHeight * 3, frameWidth, frameHeight);
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to load player walk sprites.", e);
+            BufferedImage idleSheet = readImage(
+                    "player/Four-Direction Pixel RPG Sprite Sheet.png");
+            BufferedImage walkingSheet = readImage(
+                    "player/Pixel Art Walking Hero Sprite Sheet.png");
+            BufferedImage runningSheet = readImage(
+                    "player/Pixel Runner Sprite Sheet.png");
+            BufferedImage dodgeSheet = readImage(
+                    "player/Purple-Haired Scarf Dodge Sprite Sheet.png");
+            loadIdleAnimations(idleSheet);
+            loadWalkingAnimations(walkingSheet);
+            loadRunningAnimations(runningSheet);
+            loadDodgeAnimations(dodgeSheet);
+            loadPunchAndKickAnimations(readImage(
+                    "player/Purple-Haired RPG Hero Punch and Kick Sprite Sheet.png"));
+            loadDeathAnimations(readImage(
+                    "player/Pixel Hero Four-Direction Death Animation.png"));
+            loadFallbackAnimationsFromWalking();
+            selectAnimation();
+        } catch (IOException | RuntimeException e) {
+            throw new IllegalStateException("Unable to load player animations.", e);
         }
     }
 
-    public void getPlayerImage() {
-        getPlayerImages();
-    }
-
-    public void getCombatImages() {
-        try {
-            BufferedImage sheet = readImage(
-                    "player/Pixel Art RPG Combat Sprite Sheet.png");
-
-            for (int directionIndex = 0; directionIndex < DIRECTION_COUNT; directionIndex++) {
-                for (int actionIndex = 0; actionIndex < ACTION_COUNT; actionIndex++) {
-                    int row = actionIndex + 1;
-                    int frameCount = COMBAT_FRAME_COUNTS[actionIndex];
-                    combatFrames[directionIndex][actionIndex] =
-                            new BufferedImage[frameCount];
-
-                    for (int frame = 0; frame < frameCount; frame++) {
-                        combatFrames[directionIndex][actionIndex][frame] =
-                                sliceCombatFrame(sheet, directionIndex, row, frame, frameCount);
-                    }
+    private void loadFallbackAnimationsFromWalking() {
+        for (Direction dir : Direction.values()) {
+            AnimationFrame[] frames = new AnimationFrame[2];
+            for (int frame = 0; frame < frames.length; frame++) {
+                frames[frame] = animations[dir.ordinal()][AnimationState.WALK.ordinal()]
+                        .getFrame(frame);
+            }
+            for (AnimationState animState : AnimationState.values()) {
+                if (animState == AnimationState.WALK || animState == AnimationState.IDLE
+                        || animState == AnimationState.RUN || animState == AnimationState.DODGE
+                        || animState == AnimationState.PUNCH || animState == AnimationState.KICK
+                        || animState == AnimationState.DIE) {
+                    continue;
                 }
+                boolean looping = false;
+                animations[dir.ordinal()][animState.ordinal()] =
+                        new Animation(frames, looping);
             }
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to load combat sprite sheet.", e);
         }
     }
 
-    private BufferedImage sliceCombatFrame(BufferedImage sheet, int directionIndex,
-            int row, int frame, int frameCount) {
-        int columnStart = SHEET_COLUMN_STARTS[directionIndex];
-        int columnEnd = SHEET_COLUMN_ENDS[directionIndex];
-        int rowStart = SHEET_ROW_STARTS[row];
-        int rowEnd = SHEET_ROW_ENDS[row];
+    private void loadDodgeAnimations(BufferedImage dodgeSheet) {
+        for (Direction dir : Direction.values()) {
+            AnimationFrame[] frames = new AnimationFrame[4];
+            for (int frame = 0; frame < 4; frame++) {
+                Rectangle bounds = SpriteSheetMapping.dodgeFrameBounds(dir, frame);
+                frames[frame] = new AnimationFrame(
+                        normalizeFrame(dodgeSheet.getSubimage(
+                                bounds.x, bounds.y, bounds.width, bounds.height)),
+                        DODGE_FRAME);
+            }
 
-        int cellWidth = (columnEnd - columnStart) / frameCount;
-        int x = columnStart + frame * cellWidth + 2;
-        int y = rowStart + 2;
-        int width = (frame == frameCount - 1
-                ? columnEnd - columnStart - frame * cellWidth
-                : cellWidth) - 4;
-        int height = rowEnd - rowStart - 4;
-
-        return sheet.getSubimage(x, y, width, height);
+            animations[dir.ordinal()][AnimationState.DODGE.ordinal()] =
+                    new Animation(frames, false);
+        }
     }
 
-    public BufferedImage makeTransparent(BufferedImage loadedImage) {
-        if (loadedImage == null) {
-            return null;
-        }
-
-        BufferedImage transparentImage = new BufferedImage(
-                loadedImage.getWidth(), loadedImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
-        for (int y = 0; y < loadedImage.getHeight(); y++) {
-            for (int x = 0; x < loadedImage.getWidth(); x++) {
-                int argb = loadedImage.getRGB(x, y);
-                int rgb = argb & 0x00FFFFFF;
-                transparentImage.setRGB(x, y,
-                        rgb < 0x101010 ? rgb : argb | 0xFF000000);
+    private void loadPunchAndKickAnimations(BufferedImage combatSheet) {
+        for (Direction dir : Direction.values()) {
+            AnimationFrame[] punches = new AnimationFrame[4];
+            AnimationFrame[] kicks = new AnimationFrame[4];
+            for (int frame = 0; frame < 4; frame++) {
+                Rectangle punchBounds = SpriteSheetMapping.punchFrameBounds(dir, frame);
+                Rectangle kickBounds = SpriteSheetMapping.kickFrameBounds(dir, frame);
+                punches[frame] = new AnimationFrame(
+                        normalizeFrame(combatSheet.getSubimage(
+                                punchBounds.x, punchBounds.y,
+                                punchBounds.width, punchBounds.height)),
+                        PUNCH_FRAME);
+                kicks[frame] = new AnimationFrame(
+                        normalizeFrame(combatSheet.getSubimage(
+                                kickBounds.x, kickBounds.y,
+                                kickBounds.width, kickBounds.height)),
+                        KICK_FRAME);
             }
+
+            animations[dir.ordinal()][AnimationState.PUNCH.ordinal()] =
+                    new Animation(punches, false);
+            animations[dir.ordinal()][AnimationState.KICK.ordinal()] =
+                    new Animation(kicks, false);
         }
-        return transparentImage;
+    }
+
+    private void loadDeathAnimations(BufferedImage deathSheet) {
+        for (Direction dir : Direction.values()) {
+            AnimationFrame[] frames = new AnimationFrame[4];
+            for (int frame = 0; frame < frames.length; frame++) {
+                Rectangle bounds = SpriteSheetMapping.deathFrameBounds(dir, frame);
+                frames[frame] = new AnimationFrame(
+                        normalizeFrame(deathSheet.getSubimage(
+                                bounds.x, bounds.y, bounds.width, bounds.height)),
+                        DIE_FRAME);
+            }
+            animations[dir.ordinal()][AnimationState.DIE.ordinal()] =
+                    new Animation(frames, false);
+        }
+    }
+
+    private void loadIdleAnimations(BufferedImage idleSheet) {
+        for (Direction dir : Direction.values()) {
+            Rectangle bounds = SpriteSheetMapping.idleFrameBounds(dir);
+            AnimationFrame[] frames = new AnimationFrame[] {
+                new AnimationFrame(
+                        normalizeFrame(idleSheet.getSubimage(
+                                bounds.x, bounds.y, bounds.width, bounds.height)),
+                        IDLE_FRAME)
+            };
+            animations[dir.ordinal()][AnimationState.IDLE.ordinal()] =
+                    new Animation(frames, true);
+        }
+    }
+
+    private void loadWalkingAnimations(BufferedImage walkingSheet) {
+        for (Direction dir : Direction.values()) {
+            AnimationFrame[] frames = new AnimationFrame[2];
+            for (int frame = 0; frame < frames.length; frame++) {
+                Rectangle bounds = SpriteSheetMapping.walkingFrameBounds(dir, frame);
+                frames[frame] = new AnimationFrame(
+                        normalizeFrame(walkingSheet.getSubimage(
+                                bounds.x, bounds.y, bounds.width, bounds.height)),
+                        WALK_FRAME);
+            }
+            animations[dir.ordinal()][AnimationState.WALK.ordinal()] =
+                    new Animation(frames, true);
+        }
+    }
+
+    private void loadRunningAnimations(BufferedImage runningSheet) {
+        for (Direction dir : Direction.values()) {
+            AnimationFrame[] frames = new AnimationFrame[2];
+            for (int frame = 0; frame < frames.length; frame++) {
+                Rectangle bounds = SpriteSheetMapping.runningFrameBounds(dir, frame);
+                frames[frame] = new AnimationFrame(
+                        normalizeFrame(runningSheet.getSubimage(
+                                bounds.x, bounds.y, bounds.width, bounds.height)),
+                        RUN_FRAME);
+            }
+            animations[dir.ordinal()][AnimationState.RUN.ordinal()] =
+                    new Animation(frames, true);
+        }
     }
 
     private BufferedImage readImage(String resourcePath) throws IOException {
         try (InputStream stream = openResource(resourcePath)) {
-            BufferedImage image = makeTransparent(ImageIO.read(stream));
+            BufferedImage image = ImageIO.read(stream);
             if (image == null) {
                 throw new IOException("Resource is not a readable image: " + resourcePath);
             }
-            return image;
+            return makeTransparent(image);
         }
+    }
+
+    private BufferedImage makeTransparent(BufferedImage image) {
+        BufferedImage result = new BufferedImage(image.getWidth(), image.getHeight(),
+                BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int argb = image.getRGB(x, y);
+                int rgb = argb & 0x00FFFFFF;
+                result.setRGB(x, y, rgb < 0x101010 ? rgb : argb | 0xFF000000);
+            }
+        }
+        return result;
+    }
+
+    private BufferedImage normalizeFrame(BufferedImage source) {
+        int minX = source.getWidth();
+        int minY = source.getHeight();
+        int maxX = -1;
+        int maxY = -1;
+        for (int y = 0; y < source.getHeight(); y++) {
+            for (int x = 0; x < source.getWidth(); x++) {
+                if ((source.getRGB(x, y) >>> 24) != 0) {
+                    minX = Math.min(minX, x);
+                    minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x);
+                    maxY = Math.max(maxY, y);
+                }
+            }
+        }
+        if (maxX < minX || maxY < minY) {
+            return source;
+        }
+
+        BufferedImage normalized = new BufferedImage(
+                SpriteSheetMapping.SOURCE_FRAME_SIZE,
+                SpriteSheetMapping.SOURCE_FRAME_SIZE,
+                BufferedImage.TYPE_INT_ARGB);
+        int contentWidth = maxX - minX + 1;
+        int contentHeight = maxY - minY + 1;
+        double scale = Math.min(
+                (double) normalized.getWidth() / contentWidth,
+                (double) normalized.getHeight() / contentHeight);
+        int drawWidth = Math.max(1, (int) Math.round(contentWidth * scale));
+        int drawHeight = Math.max(1, (int) Math.round(contentHeight * scale));
+        int drawX = (normalized.getWidth() - drawWidth) / 2;
+        int drawY = normalized.getHeight() - drawHeight;
+        Graphics2D graphics = normalized.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        graphics.drawImage(source.getSubimage(minX, minY, contentWidth, contentHeight),
+                drawX, drawY, drawWidth, drawHeight, null);
+        graphics.dispose();
+        return normalized;
     }
 
     private InputStream openResource(String resourcePath) throws IOException {
@@ -193,10 +309,15 @@ public class Player extends Entity {
         if (stream != null) {
             return stream;
         }
-
         Path resource = Paths.get("res", resourcePath);
         if (!Files.exists(resource)) {
             resource = Paths.get("bin", resourcePath);
+        }
+        if (!Files.exists(resource)) {
+            resource = Paths.get("Dead_End", "res", resourcePath);
+        }
+        if (!Files.exists(resource)) {
+            resource = Paths.get("Dead_End", "bin", resourcePath);
         }
         if (!Files.exists(resource)) {
             throw new IOException("Resource not found: " + resourcePath);
@@ -206,10 +327,6 @@ public class Player extends Entity {
 
     // ── Weapon Equipment Helper ───────────────────────────────────────────────
 
-    /**
-     * Retrieves the currently equipped weapon.
-     * The Main Hand equipment slot is the primary source of truth.
-     */
     public Weapon getEquippedWeapon() {
         if (gp != null && gp.equipmentManager != null) {
             Item item = gp.equipmentManager.getEquipped(EquipmentSlot.MAIN_HAND);
@@ -223,269 +340,330 @@ public class Player extends Entity {
     // ── Update ────────────────────────────────────────────────────────────────
 
     public void update() {
-        // Advance weapon animation ticks
-        weaponRenderer.update();
-
-        // Check SPACE bar attack
-        if (keyH.attackPressed) {
-            keyH.attackPressed = false;
-            triggerAttackAction();
-        }
-
-        updateCombatAction();
-        if (isLockedAction()) {
-            return;
-        }
-        updateMovement();
-        if (!isMoving()) {
-            updateIdleAnimation();
-        }
+        update(16_666_667L);
     }
 
-    private void triggerAttackAction() {
+    public void update(long deltaNanos) {
+        long delta = Math.min(deltaNanos, 100_000_000L);
+        attackCooldownNanos = Math.max(0, attackCooldownNanos - delta);
+        dodgeCooldownNanos = Math.max(0, dodgeCooldownNanos - delta);
+        damageInvulnerabilityNanos = Math.max(0, damageInvulnerabilityNanos - delta);
+        hurtRemainingNanos = Math.max(0, hurtRemainingNanos - delta);
+
+        // Update weapon animation ticks
+        if (weaponRenderer != null) {
+            weaponRenderer.update();
+        }
+
+        if (state == AnimationState.DIE) {
+            updateAnimation(delta);
+            return;
+        }
+        if (state == AnimationState.HURT) {
+            updateHurt(delta);
+            return;
+        }
+        if (isActionLocked()) {
+            updateLockedAction(delta);
+            return;
+        }
+
+        // Weapon Attack or Punch/Kick trigger
         Weapon equipped = getEquippedWeapon();
-        if (equipped != null) {
-            if (!weaponRenderer.isAttacking()) {
-                weaponRenderer.startAttack(equipped);
-                attackSequence++;
+        boolean attackRequested = keyH.attackPressed || keyH.consumePunch();
+        if (attackRequested && attackCooldownNanos == 0) {
+            keyH.attackPressed = false;
+            if (equipped != null) {
+                if (weaponRenderer != null && !weaponRenderer.isAttacking()) {
+                    weaponRenderer.startAttack(equipped);
+                    attackSequence++;
+                    attackCooldownNanos = 250_000_000L;
+                }
+            } else {
+                startAction(AnimationState.PUNCH);
             }
+        } else if (keyH.consumeKick() && attackCooldownNanos == 0) {
+            startAction(AnimationState.KICK);
+        } else if (keyH.consumeDodge() && dodgeCooldownNanos == 0) {
+            startAction(AnimationState.DODGE);
+        } else if (keyH.consumeRoll() && dodgeCooldownNanos == 0) {
+            startAction(AnimationState.ROLL);
         } else {
-            startCombatAction("PUNCH", PUNCH);
+            updateMovement(delta);
         }
     }
 
-    private void updateCombatAction() {
-        if ("BLOCK".equals(actionState)) {
-            if (keyH.blockPressed) {
-                animateCombat(BLOCK);
-            } else {
-                actionState = IDLE;
-                combatCounter = 0;
-                combatFrameIndex = 0;
-            }
-            return;
-        }
-
-        if (!IDLE.equals(actionState)) {
-            animateCurrentCombatAction();
-            return;
-        }
-
-        if (keyH.consumePunch()) {
-            triggerAttackAction();
-        } else if (keyH.consumeKick()) {
-            startCombatAction("KICK", KICK);
-        } else if (keyH.blockPressed) {
-            startCombatAction("BLOCK", BLOCK);
-        } else if (keyH.consumeDodge()) {
-            startCombatAction("DODGE", DODGE);
+    private void updateHurt(long delta) {
+        updateAnimation(delta);
+        if (hurtRemainingNanos == 0 || animationController.isFinished()) {
+            resumeFromHit();
         }
     }
 
-    private void startCombatAction(String state, int actionIndex) {
-        actionState = state;
-        combatCounter = 0;
-        combatFrameIndex = 0;
-        if (PUNCH == actionIndex || KICK == actionIndex) {
-            attackSequence++;
-        }
-        if (DODGE == actionIndex) {
-            rollDirection = getInputDirection();
-            rollDistanceRemaining = gp.tileSize * ROLL_DISTANCE_TILES;
+    private void resumeFromHit() {
+        hurtRemainingNanos = 0;
+        if (hasMovementInput()) {
+            facing = inputDirection();
+            direction = directionName(facing);
+            setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
+        } else {
+            setState(AnimationState.IDLE);
         }
     }
 
-    private void animateCurrentCombatAction() {
-        int actionIndex = getActionIndex();
-        if (DODGE == actionIndex) {
-            updateRollMovement();
+    private void updateLockedAction(long delta) {
+        if (state == AnimationState.DODGE) {
+            updateDodgeMovement();
+        } else if (state == AnimationState.ROLL) {
+            updateEvasionMovement();
         }
-        combatCounter++;
-        if (combatCounter >= 8) {
-            combatCounter = 0;
-            if (combatFrameIndex >= COMBAT_FRAME_COUNTS[actionIndex] - 1) {
-                actionState = IDLE;
-                combatFrameIndex = 0;
+        updateAnimation(delta);
+        if (animationController.isFinished()) {
+            if (state == AnimationState.HURT && health > 0) {
+                setState(AnimationState.IDLE);
+            } else if (state != AnimationState.DIE) {
+                dodgeDistanceRemaining = 0;
                 rollDistanceRemaining = 0;
-            } else {
-                combatFrameIndex++;
+                if (hasMovementInput()) {
+                    facing = inputDirection();
+                    direction = directionName(facing);
+                    setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
+                } else {
+                    setState(AnimationState.IDLE);
+                }
             }
         }
     }
 
-    private void animateCombat(int actionIndex) {
-        combatCounter++;
-        if (combatCounter >= 8) {
-            combatCounter = 0;
-            combatFrameIndex++;
-            if (combatFrameIndex >= COMBAT_FRAME_COUNTS[actionIndex]) {
-                combatFrameIndex = 0;
-            }
-        }
-    }
-
-    private int getActionIndex() {
-        if ("KICK".equals(actionState)) {
-            return KICK;
-        } else if ("BLOCK".equals(actionState)) {
-            return BLOCK;
-        } else if ("DODGE".equals(actionState)) {
-            return DODGE;
-        }
-        return PUNCH;
-    }
-
-    private void updateMovement() {
-        if (!isMoving()) {
+    private void updateDodgeMovement() {
+        if (dodgeDistanceRemaining <= 0) {
             return;
         }
+        int step = Math.min(DODGE_SPEED, dodgeDistanceRemaining);
+        direction = directionName(actionDirection);
+        moveWithCollision(step);
+        dodgeDistanceRemaining -= step;
+    }
 
-        if (keyH.upPressed) {
-            direction = "up";
-        } else if (keyH.downPressed) {
-            direction = "down";
-        } else if (keyH.leftPressed) {
-            direction = "left";
-        } else if (keyH.rightPressed) {
-            direction = "right";
-        }
-
-        collisionOn = false;
-        gp.cChecker.checkTile(this);
-        if (!collisionOn) {
-            if ("up".equals(direction)) {
-                worldY -= speed;
-            } else if ("down".equals(direction)) {
-                worldY += speed;
-            } else if ("left".equals(direction)) {
-                worldX -= speed;
-            } else if ("right".equals(direction)) {
-                worldX += speed;
-            }
-        }
-
-        spriteCounter++;
-        if (spriteCounter > 10) {
-            spriteNum = spriteNum == 1 ? 2 : 1;
-            spriteCounter = 0;
+    private void updateAnimation(long delta) {
+        animationController.update(delta);
+        combatFrameIndex = animationController.getFrameIndex();
+        if (isAttackActive() && !attackHitApplied) {
+            attackHitApplied = true;
         }
     }
 
-    private void updateRollMovement() {
+    private void startAction(AnimationState nextState) {
+        actionDirection = nextState == AnimationState.DODGE || nextState == AnimationState.ROLL
+                ? inputDirection() : facing;
+        facing = actionDirection;
+        direction = directionName(facing);
+        attackHitApplied = false;
+        if (nextState == AnimationState.PUNCH || nextState == AnimationState.KICK) {
+            attackSequence++;
+            attackCooldownNanos = nextState == AnimationState.PUNCH
+                    ? 260_000_000L : 450_000_000L;
+        }
+        if (nextState == AnimationState.DODGE) {
+            dodgeCooldownNanos = DODGE_COOLDOWN_NANOS;
+            dodgeDistanceRemaining = gp.tileSize * DODGE_DISTANCE_TILES;
+        } else if (nextState == AnimationState.ROLL) {
+            dodgeCooldownNanos = 650_000_000L;
+            rollDistanceRemaining = gp.tileSize * ROLL_DISTANCE;
+        }
+        setState(nextState);
+    }
+
+    private void updateMovement(long delta) {
+        Direction input = inputDirection();
+        boolean moving = hasMovementInput();
+        if (moving) {
+            facing = input;
+            direction = directionName(facing);
+            speed = keyH.runPressed ? 6 : 4;
+            moveWithCollision(speed);
+            setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
+        } else {
+            speed = 4;
+            setState(AnimationState.IDLE);
+        }
+        updateAnimation(delta);
+    }
+
+    private void updateEvasionMovement() {
         if (rollDistanceRemaining <= 0) {
             return;
         }
-
-        int step = Math.min(ROLL_STEP, rollDistanceRemaining);
-        direction = rollDirection;
-        collisionOn = false;
-
-        int originalSpeed = speed;
+        int step = state == AnimationState.ROLL ? ROLL_SPEED : 5;
+        step = Math.min(step, rollDistanceRemaining);
         speed = step;
+        direction = directionName(actionDirection);
+        moveWithCollision(step);
+        rollDistanceRemaining -= step;
+        speed = 4;
+    }
+
+    private void moveWithCollision(int amount) {
+        collisionOn = false;
+        int originalSpeed = speed;
+        speed = amount;
         gp.cChecker.checkTile(this);
         speed = originalSpeed;
-
         if (collisionOn) {
-            rollDistanceRemaining = 0;
             return;
         }
-
-        if ("up".equals(rollDirection)) {
-            worldY -= step;
-        } else if ("down".equals(rollDirection)) {
-            worldY += step;
-        } else if ("left".equals(rollDirection)) {
-            worldX -= step;
-        } else if ("right".equals(rollDirection)) {
-            worldX += step;
-        }
-        rollDistanceRemaining -= step;
-    }
-
-    private String getInputDirection() {
-        if (keyH.upPressed) {
-            return "up";
-        } else if (keyH.downPressed) {
-            return "down";
-        } else if (keyH.leftPressed) {
-            return "left";
-        } else if (keyH.rightPressed) {
-            return "right";
-        }
-        return direction;
-    }
-
-    private boolean isMoving() {
-        return keyH.upPressed || keyH.downPressed
-                || keyH.leftPressed || keyH.rightPressed;
-    }
-
-    private void updateIdleAnimation() {
-        idleCounter++;
-        if (idleCounter >= 12) {
-            idleCounter = 0;
-            idleFrameIndex = (idleFrameIndex + 1) % 4;
+        switch (facingForMovement()) {
+        case UP: worldY -= amount; break;
+        case RIGHT: worldX += amount; break;
+        case LEFT: worldX -= amount; break;
+        default: worldY += amount; break;
         }
     }
 
-    private boolean isLockedAction() {
-        return !"IDLE".equals(actionState);
+    private Direction facingForMovement() {
+        return state == AnimationState.DODGE || state == AnimationState.ROLL
+                ? actionDirection : facing;
+    }
+
+    private Direction inputDirection() {
+        String movementDirection = keyH.getMovementDirection();
+        if (movementDirection != null) {
+            return Direction.valueOf(movementDirection.toUpperCase());
+        }
+        return facing;
+    }
+
+    private boolean hasMovementInput() {
+        return keyH.upPressed || keyH.downPressed || keyH.leftPressed || keyH.rightPressed;
+    }
+
+    private void setState(AnimationState nextState) {
+        Direction nextDirection = isActionState(nextState) ? actionDirection : facing;
+        if (state == nextState
+                && animationController.getDirection() == nextDirection) {
+            return;
+        }
+        state = nextState;
+        actionState = nextState.name();
+        selectAnimation();
+    }
+
+    private void selectAnimation() {
+        Direction animationDirection = isActionLocked() ? actionDirection : facing;
+        animationController.setAnimation(state, animationDirection,
+                animations[animationDirection.ordinal()][state.ordinal()]);
+    }
+
+    private boolean isActionState(AnimationState animationState) {
+        return animationState == AnimationState.PUNCH
+                || animationState == AnimationState.KICK
+                || animationState == AnimationState.DODGE
+                || animationState == AnimationState.ROLL
+                || animationState == AnimationState.HURT
+                || animationState == AnimationState.DIE;
+    }
+
+    private boolean isActionLocked() {
+        return state == AnimationState.PUNCH || state == AnimationState.KICK
+                || state == AnimationState.DODGE || state == AnimationState.ROLL;
     }
 
     public boolean isAttacking() {
-        return weaponRenderer.isAttacking() || "PUNCH".equals(actionState) || "KICK".equals(actionState);
+        if (weaponRenderer != null && weaponRenderer.isAttacking()) {
+            return true;
+        }
+        return (state == AnimationState.PUNCH || state == AnimationState.KICK)
+                && isAttackActive();
+    }
+
+    private boolean isAttackActive() {
+        return state == AnimationState.PUNCH && combatFrameIndex == 1
+                || state == AnimationState.KICK && combatFrameIndex == 2;
+    }
+
+    public Rectangle getAttackHitbox() {
+        if (!isAttacking()) {
+            return null;
+        }
+        Weapon equipped = getEquippedWeapon();
+        int reach = (equipped != null) ? Math.max(gp.tileSize + 16, equipped.range)
+                : (state == AnimationState.KICK ? gp.tileSize + 12 : gp.tileSize);
+        return Hitbox.inFront(worldX + gp.tileSize / 2, worldY + gp.tileSize / 2,
+                actionDirection, reach, gp.tileSize - 4, gp.tileSize - 4);
     }
 
     public int getAttackDamage() {
         Weapon equipped = getEquippedWeapon();
-        if (equipped != null && weaponRenderer.isAttacking()) {
+        if (equipped != null && weaponRenderer != null && weaponRenderer.isAttacking()) {
             return equipped.damage;
         }
-        return "KICK".equals(actionState) ? 40 : 25;
+        return state == AnimationState.KICK ? 20 : 10;
     }
 
     public boolean isBlocking() {
-        return "BLOCK".equals(actionState);
+        return keyH.blockPressed && state == AnimationState.IDLE;
     }
 
     public boolean isDodging() {
-        return "DODGE".equals(actionState);
+        return state == AnimationState.DODGE || state == AnimationState.ROLL;
     }
 
     public int getHealth() {
         return health;
     }
 
+    public int getMaxHealth() {
+        return 100;
+    }
+
     public void takeDamage(int damage) {
+        if (health <= 0 || isDodging() || damageInvulnerabilityNanos > 0) {
+            return;
+        }
         int defense = (gp != null && gp.equipmentManager != null)
                 ? gp.equipmentManager.getTotalDefense() : 0;
         int effectiveDamage = Math.max(1, damage - defense / 2);
+        damageInvulnerabilityNanos = DAMAGE_INVULNERABILITY_NANOS;
+        hurtRemainingNanos = HURT_LOCK_NANOS;
         health = Math.max(0, health - effectiveDamage);
+        if (health == 0) {
+            actionDirection = facing;
+            setState(AnimationState.DIE);
+        } else {
+            actionDirection = facing;
+            setState(AnimationState.HURT);
+        }
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
 
     public void draw(Graphics2D g2) {
-        // 1. Draw player sprite
-        BufferedImage image = getCurrentPlayerImage();
-        int playerRenderSize = getPlayerRenderSize();
-        drawCentered(g2, image, playerRenderSize);
+        BufferedImage image = animationController.getCurrentFrame().getImage();
+        int drawSize = gp.tileSize * 2;
+        int drawX = screenX + (gp.tileSize - drawSize) / 2;
+        int drawY = screenY + gp.tileSize - drawSize;
+        Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
+        if (oldInterpolation != null) {
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
+        }
 
-        // 2. Draw off-hand item (e.g. shield)
-        drawOffHand(g2, screenX, screenY, direction);
+        String dir = directionName(facing);
+
+        // 2. Draw off-hand item (shield)
+        drawOffHand(g2, screenX, screenY, dir);
 
         // 3. Draw armor overlays (helmet, chestplate, leggings, boots)
-        drawArmorOverlays(g2, screenX, screenY, playerRenderSize, direction);
+        drawArmorOverlays(g2, drawX, drawY, drawSize, dir);
 
-        // 4. Draw equipped weapon in hand (follows player and animates swings)
-        weaponRenderer.draw(g2, screenX, screenY, direction, getEquippedWeapon());
+        // 4. Draw equipped weapon in hand
+        weaponRenderer.draw(g2, screenX, screenY, dir, getEquippedWeapon());
     }
 
-    private void drawArmorOverlays(Graphics2D g2, int sx, int sy, int drawSize, String dir) {
+    private void drawArmorOverlays(Graphics2D g2, int drawX, int drawY, int drawSize, String dir) {
         if (gp == null || gp.equipmentManager == null) return;
-
-        int drawX = sx - (drawSize - gp.tileSize) / 2;
-        int drawY = sy - (drawSize - gp.tileSize) / 2;
 
         int cx = drawX + drawSize / 2;
         if ("left".equals(dir))  cx -= 2;
@@ -607,49 +785,16 @@ public class Player extends Entity {
     }
 
     public BufferedImage getPlayerPreviewImage() {
-        return down1;
+        try {
+            if (animations != null && animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()] != null) {
+                return animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()].getFrame(0).getImage();
+            }
+        } catch (Exception ignored) {
+        }
+        return animationController.getCurrentFrame().getImage();
     }
 
-    private BufferedImage getCurrentPlayerImage() {
-        if (!IDLE.equals(actionState)) {
-            int directionIndex = getDirectionIndex();
-            int actionIndex = getActionIndex();
-            return combatFrames[directionIndex][actionIndex][combatFrameIndex];
-        }
-
-        if ("up".equals(direction)) {
-            return spriteNum == 1 ? up1 : up2;
-        } else if ("left".equals(direction)) {
-            return spriteNum == 1 ? left1 : left2;
-        } else if ("right".equals(direction)) {
-            return spriteNum == 1 ? right1 : right2;
-        }
-        return spriteNum == 1 ? down1 : down2;
-    }
-
-    private int getDirectionIndex() {
-        if ("up".equals(direction)) {
-            return UP;
-        } else if ("right".equals(direction)) {
-            return RIGHT;
-        } else if ("left".equals(direction)) {
-            return LEFT;
-        }
-        return DOWN;
-    }
-
-    private int getPlayerRenderSize() {
-        float renderScale = IDLE.equals(actionState)
-                ? IDLE_RENDER_SCALE : PLAYER_RENDER_SCALE;
-        return Math.round(gp.tileSize * renderScale);
-    }
-
-    private void drawCentered(Graphics2D g2, BufferedImage image, int drawSize) {
-        if (image == null) {
-            return;
-        }
-        int drawX = screenX - (drawSize - gp.tileSize) / 2;
-        int drawY = screenY - (drawSize - gp.tileSize) / 2;
-        g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
+    private String directionName(Direction value) {
+        return value.name().toLowerCase();
     }
 }

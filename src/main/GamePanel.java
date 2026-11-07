@@ -2,6 +2,7 @@ package main;
 
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.ArrayList;
@@ -49,6 +50,7 @@ public class GamePanel extends JPanel implements Runnable {
     public KeyHandler keyH = new KeyHandler();
 
     Thread gameThread;
+    private long lastUpdateNanos;
 
     public CollisionChecker cChecker = new CollisionChecker(this);
     public Player            player   = new Player(this, keyH);
@@ -104,6 +106,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     public void startGameThread() {
         gameThread = new Thread(this);
+        lastUpdateNanos = System.nanoTime();
         gameThread.start();
     }
 
@@ -115,7 +118,11 @@ public class GamePanel extends JPanel implements Runnable {
 
         while (gameThread != null) {
 
-            update();
+            long now = System.nanoTime();
+            long deltaNanos = now - lastUpdateNanos;
+            lastUpdateNanos = now;
+            update(deltaNanos);
+
             repaint();
 
             try {
@@ -138,6 +145,10 @@ public class GamePanel extends JPanel implements Runnable {
     // ── Update ────────────────────────────────────────────────────────────────
 
     public void update() {
+        update(16_666_667L);
+    }
+
+    public void update(long deltaNanos) {
 
         // ── TAB: toggle inventory ────────────────────────────────────────────
         if (keyH.inventoryTogglePressed) {
@@ -168,7 +179,7 @@ public class GamePanel extends JPanel implements Runnable {
 
         // ── Gameplay updates only when playing (not in inventory) ─────────────
         if (gameState.equals("PLAY")) {
-            player.update();
+            player.update(deltaNanos);
             dragon.update();
 
             Iterator<Monster> iterator = monsters.iterator();
@@ -246,6 +257,7 @@ public class GamePanel extends JPanel implements Runnable {
 
         // ── Player ────────────────────────────────────────────────────────────
         player.draw(g2);
+        drawPlayerHealthBar(g2);
 
         // ── HUD: hotbar always visible at bottom ──────────────────────────────
         inventoryUI.drawHotbar(g2, screenWidth, screenHeight);
@@ -256,5 +268,26 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         g2.dispose();
+    }
+
+    private void drawPlayerHealthBar(Graphics2D g2) {
+        int barWidth = 180;
+        int barHeight = 18;
+        int x = 16;
+        int y = screenHeight - barHeight - 16;
+        int health = Math.max(0, Math.min(player.getMaxHealth(), player.getHealth()));
+        int fillWidth = barWidth * health / player.getMaxHealth();
+
+        g2.setColor(new Color(0, 0, 0, 180));
+        g2.fillRect(x - 6, y - 22, barWidth + 12, barHeight + 28);
+        g2.setColor(Color.WHITE);
+        g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        g2.drawString("HP " + health + "/" + player.getMaxHealth(), x, y - 6);
+        g2.setColor(Color.DARK_GRAY);
+        g2.fillRect(x, y, barWidth, barHeight);
+        g2.setColor(new Color(210, 35, 35));
+        g2.fillRect(x, y, fillWidth, barHeight);
+        g2.setColor(Color.WHITE);
+        g2.drawRect(x, y, barWidth, barHeight);
     }
 }

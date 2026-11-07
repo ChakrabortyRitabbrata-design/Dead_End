@@ -111,6 +111,12 @@ public class TileManager {
             resource = Paths.get("bin", resourcePath);
         }
         if (!Files.exists(resource)) {
+            resource = Paths.get("Dead_End", "res", resourcePath);
+        }
+        if (!Files.exists(resource)) {
+            resource = Paths.get("Dead_End", "bin", resourcePath);
+        }
+        if (!Files.exists(resource)) {
             throw new IOException("Resource not found: " + resourcePath
                     + ". Add the res directory to the runtime classpath.");
         }
