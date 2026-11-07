@@ -2,9 +2,12 @@ package entities;
 
 import main.GamePanel;
 import main.KeyHandler;
+import inventory.EquipmentSlot;
 import inventory.Item;
 import inventory.Weapon;
 
+import java.awt.BasicStroke;
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
@@ -203,10 +206,18 @@ public class Player extends Entity {
 
     // ── Weapon Equipment Helper ───────────────────────────────────────────────
 
+    /**
+     * Retrieves the currently equipped weapon.
+     * The Main Hand equipment slot is the primary source of truth.
+     */
     public Weapon getEquippedWeapon() {
-        if (gp.hotbar == null) return null;
-        Item selected = gp.hotbar.getSelectedItem();
-        return (selected instanceof Weapon w) ? w : null;
+        if (gp != null && gp.equipmentManager != null) {
+            Item item = gp.equipmentManager.getEquipped(EquipmentSlot.MAIN_HAND);
+            if (item instanceof Weapon w) {
+                return w;
+            }
+        }
+        return null;
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
@@ -446,8 +457,13 @@ public class Player extends Entity {
     }
 
     public void takeDamage(int damage) {
-        health = Math.max(0, health - damage);
+        int defense = (gp != null && gp.equipmentManager != null)
+                ? gp.equipmentManager.getTotalDefense() : 0;
+        int effectiveDamage = Math.max(1, damage - defense / 2);
+        health = Math.max(0, health - effectiveDamage);
     }
+
+    // ── Render ────────────────────────────────────────────────────────────────
 
     public void draw(Graphics2D g2) {
         // 1. Draw player sprite
@@ -455,8 +471,143 @@ public class Player extends Entity {
         int playerRenderSize = getPlayerRenderSize();
         drawCentered(g2, image, playerRenderSize);
 
-        // 2. Draw equipped weapon in hand (follows player and animates swings)
+        // 2. Draw off-hand item (e.g. shield)
+        drawOffHand(g2, screenX, screenY, direction);
+
+        // 3. Draw armor overlays (helmet, chestplate, leggings, boots)
+        drawArmorOverlays(g2, screenX, screenY, playerRenderSize, direction);
+
+        // 4. Draw equipped weapon in hand (follows player and animates swings)
         weaponRenderer.draw(g2, screenX, screenY, direction, getEquippedWeapon());
+    }
+
+    private void drawArmorOverlays(Graphics2D g2, int sx, int sy, int drawSize, String dir) {
+        if (gp == null || gp.equipmentManager == null) return;
+
+        int drawX = sx - (drawSize - gp.tileSize) / 2;
+        int drawY = sy - (drawSize - gp.tileSize) / 2;
+
+        int cx = drawX + drawSize / 2;
+        if ("left".equals(dir))  cx -= 2;
+        if ("right".equals(dir)) cx += 2;
+
+        // ── 1. Head (Helmet) ──────────────────────────────────────────────────
+        Item head = gp.equipmentManager.getEquipped(EquipmentSlot.HEAD);
+        if (head != null) {
+            int topY = drawY + (int) (drawSize * 0.16);
+            int hw   = (int) (drawSize * 0.28);
+            int hh   = (int) (drawSize * 0.22);
+
+            g2.setColor(new Color(170, 190, 215, 230));
+            g2.fillArc(cx - hw / 2, topY, hw, hh, 0, 180);
+            g2.setColor(new Color(80, 95, 120, 240));
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawArc(cx - hw / 2, topY, hw, hh, 0, 180);
+            // Visor brim
+            g2.fillRect(cx - hw / 2 - 1, topY + hh / 2 - 2, hw + 2, 4);
+            if (!"up".equals(dir)) {
+                // Eye slit
+                g2.setColor(new Color(15, 20, 30, 250));
+                g2.fillRect(cx - hw / 4, topY + hh / 2 - 1, hw / 2, 2);
+            }
+            g2.setStroke(new BasicStroke(1f));
+        }
+
+        // ── 2. Chest (Chestplate) ─────────────────────────────────────────────
+        Item chest = gp.equipmentManager.getEquipped(EquipmentSlot.CHEST);
+        if (chest != null) {
+            int cy = drawY + (int) (drawSize * 0.38);
+            int cw = (int) (drawSize * 0.32);
+            int ch = (int) (drawSize * 0.24);
+
+            g2.setColor(new Color(155, 175, 200, 220));
+            g2.fillRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
+            g2.setColor(new Color(75, 90, 115, 230));
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
+            // Pauldrons (shoulders)
+            g2.setColor(new Color(130, 150, 180, 230));
+            g2.fillOval(cx - cw / 2 - 4, cy, 8, 8);
+            g2.fillOval(cx + cw / 2 - 4, cy, 8, 8);
+            g2.setStroke(new BasicStroke(1f));
+        }
+
+        // ── 3. Legs (Leggings) ────────────────────────────────────────────────
+        Item legs = gp.equipmentManager.getEquipped(EquipmentSlot.LEGS);
+        if (legs != null) {
+            int ly  = drawY + (int) (drawSize * 0.62);
+            int lw  = (int) (drawSize * 0.12);
+            int lh  = (int) (drawSize * 0.18);
+            int gap = (int) (drawSize * 0.04);
+
+            g2.setColor(new Color(140, 160, 185, 220));
+            g2.fillRoundRect(cx - lw - gap / 2, ly, lw, lh, 4, 4);
+            g2.fillRoundRect(cx + gap / 2, ly, lw, lh, 4, 4);
+            // Waist guard
+            g2.setColor(new Color(80, 95, 120, 230));
+            g2.fillRect(cx - lw - gap / 2, ly, lw * 2 + gap, 3);
+        }
+
+        // ── 4. Feet (Boots) ───────────────────────────────────────────────────
+        Item feet = gp.equipmentManager.getEquipped(EquipmentSlot.FEET);
+        if (feet != null) {
+            int by   = drawY + (int) (drawSize * 0.80);
+            int bw   = (int) (drawSize * 0.13);
+            int bh   = (int) (drawSize * 0.11);
+            int bgap = (int) (drawSize * 0.04);
+
+            g2.setColor(new Color(70, 80, 95, 240));
+            g2.fillRoundRect(cx - bw - bgap / 2, by, bw, bh, 4, 4);
+            g2.fillRoundRect(cx + bgap / 2, by, bw, bh, 4, 4);
+            // Steel toe caps
+            g2.setColor(new Color(175, 195, 220, 240));
+            g2.fillRect(cx - bw - bgap / 2, by + bh - 3, bw, 3);
+            g2.fillRect(cx + bgap / 2, by + bh - 3, bw, 3);
+        }
+    }
+
+    private void drawOffHand(Graphics2D g2, int px, int py, String dir) {
+        if (gp == null || gp.equipmentManager == null) return;
+        Item offHand = gp.equipmentManager.getEquipped(EquipmentSlot.OFF_HAND);
+        if (offHand == null) return;
+
+        int ts = gp.tileSize;
+        int sx, sy;
+        int sw = 18, sh = 24;
+
+        if (isBlocking()) {
+            // Shield held up in front while blocking
+            sx = px + ts / 2 - sw / 2;
+            sy = py + ts / 2 - sh / 2;
+        } else {
+            // Resting on off-hand side
+            switch (dir) {
+                case "up"    -> { sx = px + 6;           sy = py + ts / 2 - 4; }
+                case "down"  -> { sx = px + 4;           sy = py + ts / 2; }
+                case "left"  -> { sx = px + ts - sw - 4; sy = py + ts / 2; }
+                default      -> { sx = px + 4;           sy = py + ts / 2; } // right
+            }
+        }
+
+        // Shield body
+        g2.setColor(new Color(160, 180, 205));
+        int[] xs = { sx + sw / 2, sx, sx, sx + sw, sx + sw };
+        int[] ys = { sy + sh, sy + 4, sy, sy, sy + 4 };
+        g2.fillPolygon(xs, ys, 5);
+
+        // Center boss
+        g2.setColor(new Color(220, 180, 60));
+        g2.fillOval(sx + sw / 2 - 3, sy + sh / 2 - 4, 6, 6);
+
+        // Rim
+        g2.setColor(new Color(70, 90, 120));
+        g2.setStroke(new BasicStroke(1.5f));
+        g2.drawPolygon(xs, ys, 5);
+        g2.setStroke(new BasicStroke(1f));
+    }
+
+    public BufferedImage getPlayerPreviewImage() {
+        return down1;
     }
 
     private BufferedImage getCurrentPlayerImage() {

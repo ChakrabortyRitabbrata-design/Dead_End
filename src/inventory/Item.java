@@ -22,13 +22,18 @@ public class Item {
     public int stackSize;     // current stack count
     public int maxStackSize;  // max allowed in one slot
 
-    // ── Item types (extend as needed in future phases) ───────────────────────
+    // ── Item types ───────────────────────────────────────────────────────────
     public enum ItemType {
         MISC,
         WEAPON,
+        ARMOR,
         CONSUMABLE,
         MATERIAL
     }
+
+    // ── Equipment slot compatibility ─────────────────────────────────────────
+    /** Which equipment slot this item can be placed into. NONE = unequippable. */
+    public EquipmentSlot compatibleSlot = EquipmentSlot.NONE;
 
     // ── Constructors ────────────────────────────────────────────────────────
 
@@ -66,6 +71,7 @@ public class Item {
         // Background colour driven by item type
         Color bg = switch (type) {
             case WEAPON     -> new Color(180, 60,  60);
+            case ARMOR      -> new Color(60,  80,  160);
             case CONSUMABLE -> new Color(60,  160, 80);
             case MATERIAL   -> new Color(60,  100, 180);
             default         -> new Color(120, 120, 120);
@@ -99,8 +105,9 @@ public class Item {
     /** Returns a shallow copy of this item (same icon reference). */
     public Item copy() {
         Item copy = new Item(name, description, type, maxStackSize);
-        copy.stackSize = this.stackSize;
-        copy.icon      = this.icon;
+        copy.stackSize     = this.stackSize;
+        copy.icon          = this.icon;
+        copy.compatibleSlot = this.compatibleSlot;
         return copy;
     }
 

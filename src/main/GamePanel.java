@@ -14,6 +14,7 @@ import javax.swing.JPanel;
 import entities.Player;
 import entities.Dragon;
 import entities.Monster;
+import inventory.EquipmentManager;
 import inventory.Hotbar;
 import inventory.Inventory;
 import inventory.InventoryUI;
@@ -63,10 +64,11 @@ public class GamePanel extends JPanel implements Runnable {
     private int nextSpawnIndex;
     private final Random random = new Random();
 
-    // ── Inventory System ──────────────────────────────────────────────────────
-    public Inventory    inventory;
-    public Hotbar       hotbar;
-    public InventoryUI  inventoryUI;
+    // ── Inventory and Equipment Systems ───────────────────────────────────────
+    public Inventory        inventory        = new Inventory();
+    public Hotbar           hotbar           = new Hotbar(inventory);
+    public EquipmentManager equipmentManager = new EquipmentManager();
+    public InventoryUI      inventoryUI;
 
     // ── Game State ────────────────────────────────────────────────────────────
     /**
@@ -92,10 +94,8 @@ public class GamePanel extends JPanel implements Runnable {
         // ── Disable Swing's built-in focus traversal so TAB reaches KeyListener
         this.setFocusTraversalKeysEnabled(false);
 
-        // ── Inventory Initialization ──────────────────────────────────────────
-        inventory   = new Inventory();
-        hotbar      = new Hotbar(inventory);
-        inventoryUI = new InventoryUI(inventory, hotbar, this);
+        // ── UI Initialization ─────────────────────────────────────────────────
+        inventoryUI = new InventoryUI(inventory, hotbar, equipmentManager, this);
 
         spawnMonsters();
     }

@@ -28,21 +28,24 @@ public class Inventory {
     // ── Constructor ──────────────────────────────────────────────────────────
 
     public Inventory() {
-        // ── Seed hotbar with basic weapons (slots 27–29) ───────────────────────
-        slots[HOTBAR_OFFSET + 0] = new Weapon("Iron Sword",   "A sturdy iron sword.",     10, 30, 60, "Sword");
-        slots[HOTBAR_OFFSET + 1] = new Weapon("War Axe",      "Heavy but devastating.",   16, 50, 55, "Axe");
-        slots[HOTBAR_OFFSET + 2] = new Weapon("Shortbow",     "Fast ranged weapon.",       7, 20, 200, "Bow");
+        // ── Seed 8 required equipment test items in main inventory (slots 0–7) ─
+        slots[0] = new Weapon("Wooden Sword",    "A simple wooden training sword.",  8, 25, 50, "Sword");
+        slots[1] = new Weapon("Iron Sword",      "A sturdy forged iron sword.",     12, 30, 60, "Sword");
+        slots[2] = new Weapon("Basic Axe",       "A sharp woodcutter's battleaxe.", 15, 45, 55, "Axe");
+        slots[3] = new Armor("Basic Helmet",     "Iron cap protecting the head.",    5, "Helmet",     EquipmentSlot.HEAD);
+        slots[4] = new Armor("Basic Chestplate", "Reinforced iron cuirass.",        15, "Chestplate", EquipmentSlot.CHEST);
+        slots[5] = new Armor("Basic Leggings",   "Protective chainmail leggings.",  10, "Leggings",   EquipmentSlot.LEGS);
+        slots[6] = new Armor("Basic Boots",      "Heavy-soled travelling boots.",    5, "Boots",      EquipmentSlot.FEET);
+        slots[7] = new Armor("Basic Shield",     "Sturdy wooden shield with boss.", 12, "Shield",     EquipmentSlot.OFF_HAND);
 
-        // ── Seed main inventory with misc items (slots 0–4) ───────────────────
-        slots[0] = new Item("Torch",   "Lights up dark areas.",   Item.ItemType.MISC);
-        slots[1] = new Item("Herb",    "A healing herb.",          Item.ItemType.CONSUMABLE);
-        slots[2] = new Item("Iron Ore","Raw iron ore.",            Item.ItemType.MATERIAL);
-        slots[3] = new Item("Gem",     "A shiny gem.",             Item.ItemType.MISC);
-        slots[4] = new Item("Bone",    "An old bone.",             Item.ItemType.MISC);
+        // ── Additional utility items in main inventory (slots 8–11) ───────────
+        slots[8]  = new Item("Torch",    "Lights up dark areas.",   Item.ItemType.MISC);
+        slots[9]  = new Item("Herb",     "A restorative herb.",     Item.ItemType.CONSUMABLE);
+        slots[10] = new Item("Iron Ore", "Raw iron ore for smithing.", Item.ItemType.MATERIAL);
+        slots[11] = new Item("Gem",      "A brilliant sapphire.",   Item.ItemType.MISC);
 
-        // ── Add a couple more weapons in the main inventory ────────────────────
-        slots[9]  = new Weapon("Steel Sword",  "Forged from pure steel.",   14, 28, 60, "Sword");
-        slots[10] = new Weapon("Hunting Bow",  "For swift kills at range.", 10, 18, 250, "Bow");
+        // ── Seed hotbar slot 0 with torch so hotbar is functional at start ─────
+        slots[HOTBAR_OFFSET + 0] = new Item("Torch", "Torch for exploring.", Item.ItemType.MISC);
     }
 
     // ── Slot accessors ───────────────────────────────────────────────────────

@@ -10,9 +10,7 @@ import java.awt.image.BufferedImage;
 /**
  * Weapon is a specialised Item with combat statistics.
  *
- * This phase adds the data structure and inventory representation.
- * Actual attack logic (timers, hitboxes, animations) will be
- * added in a future phase as per task requirements.
+ * Compatible with EquipmentSlot.MAIN_HAND.
  */
 public class Weapon extends Item {
 
@@ -27,10 +25,11 @@ public class Weapon extends Item {
     public Weapon(String name, String description,
                   int damage, int attackSpeed, int range, String weaponClass) {
         super(name, description, ItemType.WEAPON, 1); // weapons don't stack
-        this.damage      = damage;
-        this.attackSpeed = attackSpeed;
-        this.range       = range;
-        this.weaponClass = weaponClass;
+        this.damage         = damage;
+        this.attackSpeed    = attackSpeed;
+        this.range          = range;
+        this.weaponClass    = weaponClass;
+        this.compatibleSlot = EquipmentSlot.MAIN_HAND;
     }
 
     // ── Icon override: draw a weapon silhouette using Java 2D ────────────────
@@ -128,6 +127,7 @@ public class Weapon extends Item {
     public Item copy() {
         Weapon w = new Weapon(name, description, damage, attackSpeed, range, weaponClass);
         w.icon = this.icon;
+        w.compatibleSlot = this.compatibleSlot;
         return w;
     }
 
