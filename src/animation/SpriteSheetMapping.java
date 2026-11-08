@@ -85,7 +85,7 @@ public final class SpriteSheetMapping {
         default: row = 3; break;
         }
         int[] ys = {30, 242, 448, 662};
-        int[] hs = {180, 164, 215, 174};
+        int[] hs = {180, 164, 165, 174};
         int[][] xs = {
             {730, 940},
             {722, 940},
@@ -111,7 +111,7 @@ public final class SpriteSheetMapping {
         default: row = 3; break;
         }
         int[] ys = {25, 242, 445, 662};
-        int[] hs = {182, 168, 218, 174};
+        int[] hs = {182, 168, 168, 174};
         int[][] xs = {
             {718, 950},
             {696, 942},

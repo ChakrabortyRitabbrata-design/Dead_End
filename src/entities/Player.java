@@ -26,11 +26,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.imageio.ImageIO;
 
+/**
+ * Player Entity
+ *
+ * Preserves the original purple-haired RPG character in the red outfit and cape.
+ * Implements frame-specific hand attachment for weapons and equipment.
+ */
 public class Player extends Entity {
     public static final long IDLE_FRAME = 150_000_000L;
     public static final long WALK_FRAME = 110_000_000L;
     public static final long RUN_FRAME = 75_000_000L;
-    public static final long PUNCH_FRAME = 90_000_000L;
+    public static final long PUNCH_FRAME = 85_000_000L;
     public static final long KICK_FRAME = 100_000_000L;
     public static final long DODGE_FRAME = 75_000_000L;
     public static final long ROLL_FRAME = 90_000_000L;
@@ -68,10 +74,7 @@ public class Player extends Entity {
     private int rollDistanceRemaining;
     private boolean attackHitApplied;
 
-    // ── Layered Sprite & Equipment Architecture ──────────────────────────────
-    private final CharacterSpriteManager spriteManager;
-    private final EquipmentRenderer equipmentRenderer;
-    private final WeaponAnimation weaponAnimation;
+    // Precision weapon renderer
     private final WeaponRenderer weaponRenderer;
 
     public Player(GamePanel gp, KeyHandler keyH) {
@@ -81,9 +84,6 @@ public class Player extends Entity {
         screenY = gp.screenHeight / 2 - gp.tileSize / 2;
         solidArea = new Rectangle(8, 16, 32, 32);
 
-        spriteManager = new CharacterSpriteManager();
-        equipmentRenderer = new EquipmentRenderer(spriteManager);
-        weaponAnimation = new WeaponAnimation(spriteManager);
         weaponRenderer = new WeaponRenderer(gp);
 
         setDefaultValues();
@@ -99,6 +99,9 @@ public class Player extends Entity {
         actionDirection = Direction.UP;
     }
 
+    /**
+     * Loads the original Dead End!! character animations from reference sprite sheets.
+     */
     private void loadAnimations() {
         try {
             BufferedImage idleSheet = readImage(
@@ -120,7 +123,7 @@ public class Player extends Entity {
             loadFallbackAnimationsFromWalking();
             selectAnimation();
         } catch (IOException | RuntimeException e) {
-            throw new IllegalStateException("Unable to load player animations.", e);
+            throw new IllegalStateException("Unable to load original player animations.", e);
         }
     }
 
@@ -343,16 +346,20 @@ public class Player extends Entity {
         return null;
     }
 
-    public EquipmentRenderer getEquipmentRenderer() {
-        return equipmentRenderer;
+    public WeaponRenderer getWeaponRenderer() {
+        return weaponRenderer;
     }
 
-    public CharacterSpriteManager getSpriteManager() {
-        return spriteManager;
+    public AnimationController getAnimationController() {
+        return animationController;
     }
 
-    public WeaponAnimation getWeaponAnimation() {
-        return weaponAnimation;
+    public AnimationState getState() {
+        return state;
+    }
+
+    public Direction getFacing() {
+        return facing;
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
@@ -368,10 +375,6 @@ public class Player extends Entity {
         damageInvulnerabilityNanos = Math.max(0, damageInvulnerabilityNanos - delta);
         hurtRemainingNanos = Math.max(0, hurtRemainingNanos - delta);
 
-        // Update weapon animation systems
-        if (weaponAnimation != null) {
-            weaponAnimation.update(delta);
-        }
         if (weaponRenderer != null) {
             weaponRenderer.update();
         }
@@ -395,9 +398,9 @@ public class Player extends Entity {
         if (attackRequested && attackCooldownNanos == 0) {
             keyH.attackPressed = false;
             if (equipped != null) {
-                if (weaponAnimation != null && !weaponAnimation.isAttacking()) {
-                    weaponAnimation.startAttack(equipped, facing);
-                    if (weaponRenderer != null) weaponRenderer.startAttack(equipped);
+                if (weaponRenderer != null && !weaponRenderer.isAttacking()) {
+                    weaponRenderer.startAttack(equipped);
+                    startAction(AnimationState.PUNCH); // Plays attack motion with character's arm
                     attackSequence++;
                     attackCooldownNanos = 250_000_000L;
                 }
@@ -591,9 +594,6 @@ public class Player extends Entity {
     }
 
     public boolean isAttacking() {
-        if (weaponAnimation != null && weaponAnimation.isAttacking()) {
-            return true;
-        }
         if (weaponRenderer != null && weaponRenderer.isAttacking()) {
             return true;
         }
@@ -619,7 +619,7 @@ public class Player extends Entity {
 
     public int getAttackDamage() {
         Weapon equipped = getEquippedWeapon();
-        if (equipped != null && isAttacking()) {
+        if (equipped != null && weaponRenderer != null && weaponRenderer.isAttacking()) {
             return equipped.damage;
         }
         return state == AnimationState.KICK ? 20 : 10;
@@ -663,50 +663,164 @@ public class Player extends Entity {
     // ── Render ────────────────────────────────────────────────────────────────
 
     public void draw(Graphics2D g2) {
+        BufferedImage image = animationController.getCurrentFrame().getImage();
         int drawSize = gp.tileSize * 2;
         int drawX = screenX + (gp.tileSize - drawSize) / 2;
         int drawY = screenY + gp.tileSize - drawSize;
 
-        String dir = directionName(facing);
+        Weapon equipped = getEquippedWeapon();
+        int frameIdx = animationController.getFrameIndex();
 
-        if (weaponAnimation != null && weaponAnimation.isAttacking()) {
-            // Weapon attack animation with synchronized weapon swing, effects, and armor overlays
-            weaponAnimation.drawAttack(g2, drawX, drawY, drawSize, facing);
-            // Draw armor overlays over the attacking character
-            equipmentRenderer.render(g2, gp.equipmentManager, AnimationState.IDLE, facing, 0, drawX, drawY, drawSize);
-        } else {
-            // Check if we can use our production layered renderer
-            BufferedImage customBase = spriteManager.getBaseFrame(state, facing, animationController.getFrameIndex());
-            if (customBase != null) {
-                equipmentRenderer.render(g2, gp.equipmentManager, state, facing,
-                        animationController.getFrameIndex(), drawX, drawY, drawSize);
-            } else {
-                // Fallback to legacy sheet frame if custom base is not ready
-                BufferedImage image = animationController.getCurrentFrame().getImage();
-                Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
-                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                        RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
-                if (oldInterpolation != null) {
-                    g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
-                }
-                // Render equipment overlays on top
-                equipmentRenderer.render(g2, gp.equipmentManager, state, facing,
-                        animationController.getFrameIndex(), drawX, drawY, drawSize);
+        // 1. Draw rear-layer weapon if facing UP
+        if (equipped != null && weaponRenderer != null) {
+            weaponRenderer.drawHandAnchored(g2, drawX, drawY, drawSize, state, facing, frameIdx, equipped, "BEHIND");
+        }
+
+        // 2. Draw off-hand item behind if facing RIGHT
+        if (facing == Direction.RIGHT) {
+            drawOffHand(g2, drawX, drawY, drawSize, facing);
+        }
+
+        // 3. Draw the original player character sprite
+        Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
+        if (oldInterpolation != null) {
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
+        }
+
+        // 4. Draw armor overlays
+        drawArmorOverlays(g2, drawX, drawY, drawSize, facing);
+
+        // 5. Draw off-hand item in front if facing DOWN, LEFT, UP
+        if (facing != Direction.RIGHT) {
+            drawOffHand(g2, drawX, drawY, drawSize, facing);
+        }
+
+        // 6. Draw front-layer weapon in hand
+        if (equipped != null && weaponRenderer != null) {
+            weaponRenderer.drawHandAnchored(g2, drawX, drawY, drawSize, state, facing, frameIdx, equipped, "FRONT");
+        }
+    }
+
+    private void drawArmorOverlays(Graphics2D g2, int drawX, int drawY, int drawSize, Direction dir) {
+        if (gp == null || gp.equipmentManager == null) return;
+
+        double scale = (double) drawSize / 64.0;
+        int cx = drawX + drawSize / 2;
+        if (dir == Direction.LEFT)  cx -= 3;
+        if (dir == Direction.RIGHT) cx += 3;
+
+        // ── 1. Head (Helmet) ──────────────────────────────────────────────────
+        Item head = gp.equipmentManager.getEquipped(EquipmentSlot.HEAD);
+        if (head != null) {
+            int topY = drawY + (int) (12 * scale);
+            int hw   = (int) (26 * scale);
+            int hh   = (int) (18 * scale);
+
+            g2.setColor(new Color(175, 195, 220, 235));
+            g2.fillArc(cx - hw / 2, topY, hw, hh, 0, 180);
+            g2.setColor(new Color(80, 95, 120, 240));
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawArc(cx - hw / 2, topY, hw, hh, 0, 180);
+            g2.fillRect(cx - hw / 2 - 1, topY + hh / 2 - 2, hw + 2, 4);
+            if (dir != Direction.UP) {
+                g2.setColor(new Color(15, 20, 30, 250));
+                g2.fillRect(cx - hw / 4, topY + hh / 2 - 1, hw / 2, 2);
             }
+            g2.setStroke(new BasicStroke(1f));
+        }
 
-            // Draw held weapon (idle state)
-            Weapon equipped = getEquippedWeapon();
-            if (equipped != null && weaponRenderer != null) {
-                weaponRenderer.draw(g2, screenX, screenY, dir, equipped);
+        // ── 2. Chest (Chestplate) ─────────────────────────────────────────────
+        Item chest = gp.equipmentManager.getEquipped(EquipmentSlot.CHEST);
+        if (chest != null) {
+            int cy = drawY + (int) (26 * scale);
+            int cw = (int) (22 * scale);
+            int ch = (int) (16 * scale);
+
+            g2.setColor(new Color(160, 180, 205, 225));
+            g2.fillRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
+            g2.setColor(new Color(75, 90, 115, 230));
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
+            g2.setColor(new Color(130, 150, 180, 230));
+            g2.fillOval(cx - cw / 2 - 3, cy, 7, 7);
+            g2.fillOval(cx + cw / 2 - 4, cy, 7, 7);
+            g2.setStroke(new BasicStroke(1f));
+        }
+
+        // ── 3. Legs (Leggings) ────────────────────────────────────────────────
+        Item legs = gp.equipmentManager.getEquipped(EquipmentSlot.LEGS);
+        if (legs != null) {
+            int ly  = drawY + (int) (42 * scale);
+            int lw  = (int) (8 * scale);
+            int lh  = (int) (10 * scale);
+            int gap = (int) (4 * scale);
+
+            g2.setColor(new Color(145, 165, 190, 220));
+            g2.fillRoundRect(cx - lw - gap / 2, ly, lw, lh, 4, 4);
+            g2.fillRoundRect(cx + gap / 2, ly, lw, lh, 4, 4);
+            g2.setColor(new Color(80, 95, 120, 230));
+            g2.fillRect(cx - lw - gap / 2, ly, lw * 2 + gap, 3);
+        }
+
+        // ── 4. Feet (Boots) ───────────────────────────────────────────────────
+        Item feet = gp.equipmentManager.getEquipped(EquipmentSlot.FEET);
+        if (feet != null) {
+            int by   = drawY + (int) (52 * scale);
+            int bw   = (int) (9 * scale);
+            int bh   = (int) (8 * scale);
+            int bgap = (int) (4 * scale);
+
+            g2.setColor(new Color(70, 80, 95, 240));
+            g2.fillRoundRect(cx - bw - bgap / 2, by, bw, bh, 4, 4);
+            g2.fillRoundRect(cx + bgap / 2, by, bw, bh, 4, 4);
+            g2.setColor(new Color(175, 195, 220, 240));
+            g2.fillRect(cx - bw - bgap / 2, by + bh - 2, bw, 2);
+            g2.fillRect(cx + bgap / 2, by + bh - 2, bw, 2);
+        }
+    }
+
+    private void drawOffHand(Graphics2D g2, int drawX, int drawY, int drawSize, Direction dir) {
+        if (gp == null || gp.equipmentManager == null) return;
+        Item offHand = gp.equipmentManager.getEquipped(EquipmentSlot.OFF_HAND);
+        if (offHand == null) return;
+
+        double scale = (double) drawSize / 64.0;
+        int sx, sy;
+        int sw = (int)(15 * scale);
+        int sh = (int)(20 * scale);
+
+        if (isBlocking()) {
+            sx = drawX + drawSize / 2 - sw / 2;
+            sy = drawY + (int)(30 * scale);
+        } else {
+            // Anchor to left hand position
+            switch (dir) {
+                case UP    -> { sx = drawX + (int)(15 * scale); sy = drawY + (int)(32 * scale); }
+                case DOWN  -> { sx = drawX + (int)(14 * scale); sy = drawY + (int)(34 * scale); }
+                case LEFT  -> { sx = drawX + (int)(28 * scale); sy = drawY + (int)(34 * scale); }
+                default    -> { sx = drawX + (int)(16 * scale); sy = drawY + (int)(34 * scale); } // RIGHT
             }
         }
+
+        g2.setColor(new Color(160, 180, 205));
+        int[] xs = { sx + sw / 2, sx, sx, sx + sw, sx + sw };
+        int[] ys = { sy + sh, sy + 3, sy, sy, sy + 3 };
+        g2.fillPolygon(xs, ys, 5);
+
+        g2.setColor(new Color(220, 180, 60));
+        g2.fillOval(sx + sw / 2 - 3, sy + sh / 2 - 3, 6, 6);
+
+        g2.setColor(new Color(70, 90, 120));
+        g2.setStroke(new BasicStroke(1.2f));
+        g2.drawPolygon(xs, ys, 5);
+        g2.setStroke(new BasicStroke(1f));
     }
 
     public BufferedImage getPlayerPreviewImage() {
         try {
-            BufferedImage preview = spriteManager.getBaseFrame(AnimationState.IDLE, Direction.DOWN, 0);
-            if (preview != null) return preview;
             if (animations != null && animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()] != null) {
                 return animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()].getFrame(0).getImage();
             }
