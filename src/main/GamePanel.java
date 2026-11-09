@@ -5,6 +5,8 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -72,6 +74,11 @@ public class GamePanel extends JPanel implements Runnable {
     public EquipmentManager equipmentManager = new EquipmentManager();
     public InventoryUI      inventoryUI;
 
+    // ── Heart UI assets (generated procedurally) ──────────────────────────────
+    private BufferedImage heartFull;
+    private BufferedImage heartHalf;
+    private BufferedImage heartEmpty;
+
     // ── Game State ────────────────────────────────────────────────────────────
     /**
      * "PLAY"      – normal gameplay, player and monsters update.
@@ -99,7 +106,80 @@ public class GamePanel extends JPanel implements Runnable {
         // ── UI Initialization ─────────────────────────────────────────────────
         inventoryUI = new InventoryUI(inventory, hotbar, equipmentManager, this);
 
+        // ── Generate heart sprites ────────────────────────────────────────────
+        heartFull  = createHeartImage(true,  false);
+        heartHalf  = createHeartImage(true,  true);
+        heartEmpty = createHeartImage(false, false);
+
         spawnMonsters();
+    }
+
+    // ── Heart image generation ────────────────────────────────────────────────
+
+    /**
+     * Draws a pixel-art heart icon (20×20 px) into a BufferedImage.
+     * @param filled  whether the heart has any fill
+     * @param half    whether only the left half is filled (half heart)
+     */
+    private BufferedImage createHeartImage(boolean filled, boolean half) {
+        int size = 20;
+        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+
+        // Heart pixel pattern (14x12 heart centered in 20x20)
+        // Each cell is 1px; pattern rows from top
+        int[] row0 = {3,4,5,6,  8,9,10,11};
+        int[] row1 = {2,3,4,5,6,7, 7,8,9,10,11,12};
+        int[] row2 = {1,2,3,4,5,6,7,8,9,10,11,12,13};
+        int[] row3 = {1,2,3,4,5,6,7,8,9,10,11,12,13};
+        int[] row4 = {2,3,4,5,6,7,8,9,10,11,12};
+        int[] row5 = {3,4,5,6,7,8,9,10,11};
+        int[] row6 = {4,5,6,7,8,9,10};
+        int[] row7 = {5,6,7,8,9};
+        int[] row8 = {6,7,8};
+        int[] row9 = {7};
+        int[][] rows = {row0,row1,row2,row3,row4,row5,row6,row7,row8,row9};
+        int startY = 4;
+
+        Color fillColor  = new Color(220, 40, 40);
+        Color halfColor  = new Color(180, 30, 30);
+        Color darkColor  = new Color(60,  60, 60);
+        Color emptyColor = new Color(80, 80, 80, 180);
+        Color outlineCol = new Color(20, 20, 20, 240);
+
+        for (int r = 0; r < rows.length; r++) {
+            for (int px : rows[r]) {
+                int drawX = px + 2;
+                int drawY = startY + r;
+                Color c;
+                if (!filled) {
+                    c = emptyColor;
+                } else if (half && drawX >= size / 2) {
+                    c = emptyColor;
+                } else {
+                    c = (r <= 1 && drawX < size / 2 + 2) ? new Color(255, 100, 100) : fillColor;
+                }
+                img.setRGB(drawX, drawY, c.getRGB() | 0xFF000000);
+            }
+        }
+
+        // Simple 1px outline
+        for (int r = 0; r < rows.length; r++) {
+            for (int px : rows[r]) {
+                int drawX = px + 2;
+                int drawY = startY + r;
+                // Check neighbors
+                boolean edge = false;
+                if (r == 0 || drawX == rows[r][0] + 2 || drawX == rows[r][rows[r].length-1] + 2) edge = true;
+                if (edge) {
+                    // Will just draw outline dots around non-transparent pixels
+                }
+            }
+        }
+
+        g.dispose();
+        return img;
     }
 
     // ── Game Thread ───────────────────────────────────────────────────────────
@@ -191,6 +271,9 @@ public class GamePanel extends JPanel implements Runnable {
                 }
             }
             replenishMonsters();
+
+            // ── Advance damage popups ─────────────────────────────────────────
+            DamagePopup.updateAll(deltaNanos);
         }
     }
 
@@ -257,9 +340,12 @@ public class GamePanel extends JPanel implements Runnable {
 
         // ── Player ────────────────────────────────────────────────────────────
         player.draw(g2);
-        drawPlayerHealthBar(g2);
 
-        // ── HUD: hotbar always visible at bottom ──────────────────────────────
+        // ── Damage popups ─────────────────────────────────────────────────────
+        DamagePopup.drawAll(g2);
+
+        // ── HUD: hearts + hotbar always visible ───────────────────────────────
+        drawPlayerHearts(g2);
         inventoryUI.drawHotbar(g2, screenWidth, screenHeight);
 
         // ── Inventory overlay (only when open) ────────────────────────────────
@@ -270,24 +356,49 @@ public class GamePanel extends JPanel implements Runnable {
         g2.dispose();
     }
 
-    private void drawPlayerHealthBar(Graphics2D g2) {
-        int barWidth = 180;
-        int barHeight = 18;
-        int x = 16;
-        int y = screenHeight - barHeight - 16;
-        int health = Math.max(0, Math.min(player.getMaxHealth(), player.getHealth()));
-        int fillWidth = barWidth * health / player.getMaxHealth();
+    // ── Heart HUD ─────────────────────────────────────────────────────────────
 
-        g2.setColor(new Color(0, 0, 0, 180));
-        g2.fillRect(x - 6, y - 22, barWidth + 12, barHeight + 28);
-        g2.setColor(Color.WHITE);
-        g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-        g2.drawString("HP " + health + "/" + player.getMaxHealth(), x, y - 6);
-        g2.setColor(Color.DARK_GRAY);
-        g2.fillRect(x, y, barWidth, barHeight);
-        g2.setColor(new Color(210, 35, 35));
-        g2.fillRect(x, y, fillWidth, barHeight);
-        g2.setColor(Color.WHITE);
-        g2.drawRect(x, y, barWidth, barHeight);
+    /**
+     * Draws pixel heart icons in the top-left corner.
+     * Max health = 100, 10 hearts, each worth 10 HP.
+     * Full heart  = 10 HP, half heart = 5 HP, empty = 0 HP.
+     */
+    private void drawPlayerHearts(Graphics2D g2) {
+        final int MAX_HEARTS = 10;
+        final int HEART_SIZE = 20;
+        final int HEART_GAP  = 3;
+        final int START_X    = 14;
+        final int START_Y    = 14;
+
+        int currentHP = Math.max(0, Math.min(player.getMaxHealth(), player.getHealth()));
+        int maxHP     = player.getMaxHealth();
+
+        // Semi-transparent panel behind hearts
+        int panelW = MAX_HEARTS * (HEART_SIZE + HEART_GAP) + 4;
+        int panelH = HEART_SIZE + 8;
+        g2.setColor(new Color(0, 0, 0, 140));
+        g2.fillRoundRect(START_X - 6, START_Y - 4, panelW, panelH, 8, 8);
+
+        for (int i = 0; i < MAX_HEARTS; i++) {
+            int hpThreshold    = (i + 1) * (maxHP / MAX_HEARTS);
+            int halfThreshold  = i * (maxHP / MAX_HEARTS) + (maxHP / MAX_HEARTS / 2);
+            int drawX = START_X + i * (HEART_SIZE + HEART_GAP);
+            int drawY = START_Y;
+
+            BufferedImage heart;
+            if (currentHP >= hpThreshold) {
+                heart = heartFull;
+            } else if (currentHP > halfThreshold) {
+                heart = heartHalf;
+            } else {
+                heart = heartEmpty;
+            }
+            g2.drawImage(heart, drawX, drawY, HEART_SIZE, HEART_SIZE, null);
+        }
+
+        // HP text below hearts
+        g2.setColor(new Color(200, 200, 200));
+        g2.setFont(new Font("Arial", Font.PLAIN, 10));
+        g2.drawString(currentHP + "/" + maxHP + " HP", START_X, START_Y + HEART_SIZE + 10);
     }
 }

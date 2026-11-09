@@ -13,8 +13,10 @@ import inventory.EquipmentSlot;
 import inventory.Item;
 import inventory.Weapon;
 
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -25,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.imageio.ImageIO;
+import main.DamagePopup;
 
 /**
  * Player Entity
@@ -334,7 +337,7 @@ public class Player extends Entity {
         return Files.newInputStream(resource);
     }
 
-    // ── Weapon Equipment Helper ───────────────────────────────────────────────
+    // â”€â”€ Weapon Equipment Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public Weapon getEquippedWeapon() {
         if (gp != null && gp.equipmentManager != null) {
@@ -362,7 +365,7 @@ public class Player extends Entity {
         return facing;
     }
 
-    // ── Update ────────────────────────────────────────────────────────────────
+    // â”€â”€ Update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public void update() {
         update(16_666_667L);
@@ -647,10 +650,16 @@ public class Player extends Entity {
         }
         int defense = (gp != null && gp.equipmentManager != null)
                 ? gp.equipmentManager.getTotalDefense() : 0;
+        // Shield blocking: reduce damage by 60% when blocking
+        if (isBlocking()) {
+            damage = Math.max(1, damage * 2 / 5);
+        }
         int effectiveDamage = Math.max(1, damage - defense / 2);
         damageInvulnerabilityNanos = DAMAGE_INVULNERABILITY_NANOS;
         hurtRemainingNanos = HURT_LOCK_NANOS;
         health = Math.max(0, health - effectiveDamage);
+        // Spawn a red damage popup at player screen center
+        DamagePopup.spawn(screenX + gp.tileSize / 2, screenY - 10, effectiveDamage, true);
         if (health == 0) {
             actionDirection = facing;
             setState(AnimationState.DIE);
@@ -660,7 +669,7 @@ public class Player extends Entity {
         }
     }
 
-    // ── Render ────────────────────────────────────────────────────────────────
+    // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public void draw(Graphics2D g2) {
         BufferedImage image = animationController.getCurrentFrame().getImage();
@@ -685,7 +694,13 @@ public class Player extends Entity {
         Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
         g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                 RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
+
+        // Invulnerability blink: skip drawing every other frame while flashing
+        boolean skipDraw = (damageInvulnerabilityNanos > 0)
+                && ((damageInvulnerabilityNanos / 60_000_000L) % 2 == 0);
+        if (!skipDraw) {
+            g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
+        }
         if (oldInterpolation != null) {
             g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
         }
@@ -712,7 +727,7 @@ public class Player extends Entity {
         if (dir == Direction.LEFT)  cx -= 3;
         if (dir == Direction.RIGHT) cx += 3;
 
-        // ── 1. Head (Helmet) ──────────────────────────────────────────────────
+        // â”€â”€ 1. Head (Helmet) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Item head = gp.equipmentManager.getEquipped(EquipmentSlot.HEAD);
         if (head != null) {
             int topY = drawY + (int) (12 * scale);
@@ -732,7 +747,7 @@ public class Player extends Entity {
             g2.setStroke(new BasicStroke(1f));
         }
 
-        // ── 2. Chest (Chestplate) ─────────────────────────────────────────────
+        // â”€â”€ 2. Chest (Chestplate) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Item chest = gp.equipmentManager.getEquipped(EquipmentSlot.CHEST);
         if (chest != null) {
             int cy = drawY + (int) (26 * scale);
@@ -750,7 +765,7 @@ public class Player extends Entity {
             g2.setStroke(new BasicStroke(1f));
         }
 
-        // ── 3. Legs (Leggings) ────────────────────────────────────────────────
+        // â”€â”€ 3. Legs (Leggings) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Item legs = gp.equipmentManager.getEquipped(EquipmentSlot.LEGS);
         if (legs != null) {
             int ly  = drawY + (int) (42 * scale);
@@ -765,7 +780,7 @@ public class Player extends Entity {
             g2.fillRect(cx - lw - gap / 2, ly, lw * 2 + gap, 3);
         }
 
-        // ── 4. Feet (Boots) ───────────────────────────────────────────────────
+        // â”€â”€ 4. Feet (Boots) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Item feet = gp.equipmentManager.getEquipped(EquipmentSlot.FEET);
         if (feet != null) {
             int by   = drawY + (int) (52 * scale);
