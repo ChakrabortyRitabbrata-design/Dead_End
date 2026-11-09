@@ -790,20 +790,20 @@ public class Player extends Entity {
         if (legs != null) {
             BufferedImage legSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.LEGS, dir);
             if (legSprite != null) {
-                int lw = (int)(19 * sc);
+                int lw = (int)(20 * sc);
                 int lh = (int)(18 * sc);
                 g2.drawImage(legSprite, cx - lw / 2, drawY + (int)(40 * sc), lw, lh, null);
             }
         }
 
-        // 2. Boots
+        // 2. Boots — drawn before chestplate so chest overlaps nicely
         Item feet = gp.equipmentManager.getEquipped(EquipmentSlot.FEET);
         if (feet != null) {
             BufferedImage bootSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.FEET, dir);
             if (bootSprite != null) {
-                int bw = (int)(18 * sc);
-                int bh = (int)(15 * sc);
-                g2.drawImage(bootSprite, cx - bw / 2, drawY + (int)(51 * sc), bw, bh, null);
+                int bw = (int)(20 * sc);
+                int bh = (int)(16 * sc);  // slightly taller to cover original boots
+                g2.drawImage(bootSprite, cx - bw / 2, drawY + (int)(50 * sc), bw, bh, null);
             }
         }
 
@@ -812,9 +812,10 @@ public class Player extends Entity {
         if (chest != null) {
             BufferedImage chestSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.CHEST, dir);
             if (chestSprite != null) {
-                int cw = (int)(22 * sc);
-                int ch = (int)(20 * sc);
-                g2.drawImage(chestSprite, cx - cw / 2, drawY + (int)(27 * sc), cw, ch, null);
+                int cw = (int)(24 * sc);
+                int ch = (int)(22 * sc);
+                int chestYOff = drawY + (int)(25 * sc);
+                g2.drawImage(chestSprite, cx - cw / 2, chestYOff, cw, ch, null);
             }
         }
 
@@ -825,8 +826,16 @@ public class Player extends Entity {
             if (helmSprite != null) {
                 int hw = (int)(24 * sc);
                 int hh = (int)(24 * sc);
-                int hy = (dir == Direction.DOWN) ? drawY + (int)(11 * sc) : drawY + (int)(9 * sc);
-                g2.drawImage(helmSprite, cx - hw / 2, hy, hw, hh, null);
+                int hx = cx - hw / 2;
+                if (dir == Direction.LEFT)  hx -= (int)(1 * sc);
+                if (dir == Direction.RIGHT) hx += (int)(1 * sc);
+                int hy = switch (dir) {
+                    case UP    -> drawY + (int)(1 * sc);
+                    case LEFT  -> drawY + (int)(2 * sc);
+                    case RIGHT -> drawY + (int)(2 * sc);
+                    default    -> drawY + (int)(2 * sc); // DOWN
+                };
+                g2.drawImage(helmSprite, hx, hy, hw, hh, null);
             }
         }
     }
@@ -838,20 +847,21 @@ public class Player extends Entity {
 
         double sc = (double) drawSize / 64.0;
         int sw = (int)(18 * sc);
-        int sh = (int)(22 * sc);
+        int sh = (int)(24 * sc);
         int sx, sy;
 
         if (isBlocking()) {
             // Thrust forward in blocking stance
             sx = drawX + drawSize / 2 - sw / 2;
-            sy = drawY + (int)(28 * sc);
+            sy = drawY + (int)(26 * sc);
         } else {
-            // Anchor to off-hand side
+            // Anchor shield to the character's off-hand arm
+            // DOWN/UP: left side of body; LEFT: far arm (right side of frame); RIGHT: near arm
             switch (dir) {
-                case UP    -> { sx = drawX + (int)(12 * sc); sy = drawY + (int)(30 * sc); }
-                case DOWN  -> { sx = drawX + (int)(12 * sc); sy = drawY + (int)(31 * sc); }
-                case LEFT  -> { sx = drawX + (int)(26 * sc); sy = drawY + (int)(31 * sc); }
-                default    -> { sx = drawX + (int)(14 * sc); sy = drawY + (int)(31 * sc); } // RIGHT
+                case UP    -> { sx = drawX + (int)(9 * sc);  sy = drawY + (int)(28 * sc); }
+                case DOWN  -> { sx = drawX + (int)(9 * sc);  sy = drawY + (int)(29 * sc); }
+                case LEFT  -> { sx = drawX + (int)(26 * sc); sy = drawY + (int)(29 * sc); }
+                default    -> { sx = drawX + (int)(11 * sc); sy = drawY + (int)(29 * sc); } // RIGHT
             }
         }
 

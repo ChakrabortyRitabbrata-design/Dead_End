@@ -46,12 +46,11 @@ public class EquipmentSpriteSheet {
             BufferedImage sheet = ImageIO.read(is);
             if (sheet == null) return;
 
+            int frameW = sheet.getWidth() / 4;
+            int frameH = sheet.getHeight();
             BufferedImage[] dirs = new BufferedImage[4];
             for (int d = 0; d < 4; d++) {
-                int x = d * FRAME_SIZE;
-                if (x + FRAME_SIZE <= sheet.getWidth()) {
-                    dirs[d] = sheet.getSubimage(x, 0, FRAME_SIZE, sheet.getHeight());
-                }
+                dirs[d] = sheet.getSubimage(d * frameW, 0, frameW, frameH);
             }
             SPRITES.put(slot, dirs);
         } catch (Exception e) {
