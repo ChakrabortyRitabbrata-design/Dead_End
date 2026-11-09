@@ -1,5 +1,7 @@
 package entities;
 
+import animation.Direction;
+
 import main.DamagePopup;
 import main.GamePanel;
 
@@ -232,7 +234,7 @@ public class Monster {
             return;
         }
         lastPlayerAttackSequence = gp.player.attackSequence;
-        takeDamage(gp.player.getAttackDamage());
+        takeDamage(gp.player.getAttackDamage(), gp.player.getFacing());
     }
 
     private void followPlayer() {
@@ -274,8 +276,8 @@ public class Monster {
         if (attackCounter == 12 && !attackDamageApplied
                 && distanceToPlayer() <= attackRange) {
             attackDamageApplied = true;
-            if (!gp.player.isBlocking() && !gp.player.isDodging()) {
-                gp.player.takeDamage(10);
+            if (!gp.player.isDodging()) {
+                gp.player.takeDamage(10, worldX + gp.tileSize / 2, worldY + gp.tileSize / 2);
             }
         }
         if (attackCounter >= 20) {
@@ -288,14 +290,37 @@ public class Monster {
     }
 
     public void takeDamage(int damage) {
+        takeDamage(damage, null);
+    }
+
+    public void takeDamage(int damage, Direction fromDir) {
         if (dying || dead) {
             return;
         }
         health = Math.max(0, health - damage);
         hurtFlashCounter = HURT_FLASH_FRAMES;
+
+        // Hitstun: interrupts monster attack so player is never hit while attacking!
+        attacking = false;
+        attackDamageApplied = true;
+        attackCounter = 0;
+        attackCooldown = 35; // Recovery frames
+
+        // Knockback away from attacker
+        if (fromDir != null) {
+            int kb = gp.tileSize / 3;
+            switch (fromDir) {
+                case UP    -> worldY = Math.max(0, worldY - kb);
+                case DOWN  -> worldY = Math.min(gp.worldHeight - gp.tileSize, worldY + kb);
+                case LEFT  -> worldX = Math.max(0, worldX - kb);
+                case RIGHT -> worldX = Math.min(gp.worldWidth - gp.tileSize, worldX + kb);
+            }
+        }
+
         int screenX = worldX - gp.player.worldX + gp.player.screenX + gp.tileSize / 2;
         int screenY = worldY - gp.player.worldY + gp.player.screenY - 10;
         DamagePopup.spawn(screenX, screenY, damage, false);
+
         if (health == 0) {
             dying = true;
             attacking = false;

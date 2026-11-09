@@ -332,29 +332,17 @@ public class InventoryUI {
                 if (oldInterp != null) g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterp);
             }
 
+            // Draw synchronized armor overlays (Helmet, Chestplate, Leggings, Boots)
+            gamePanel.player.drawArmorOverlays(g2, charX, charY, charSize, animation.Direction.DOWN);
+
+            // Draw synchronized offhand shield
+            gamePanel.player.drawOffHand(g2, charX, charY, charSize, animation.Direction.DOWN);
+
             // Draw equipped weapon anchored to hand
             Weapon weapon = (equipmentManager.getEquipped(EquipmentSlot.MAIN_HAND) instanceof Weapon w) ? w : null;
             if (weapon != null && gamePanel.player.getWeaponRenderer() != null) {
                 gamePanel.player.getWeaponRenderer().drawHandAnchored(g2, charX, charY, charSize,
                         animation.AnimationState.IDLE, animation.Direction.DOWN, 0, weapon, "FRONT");
-            }
-
-            // Draw offhand shield on preview
-            Item offHand = equipmentManager.getEquipped(EquipmentSlot.OFF_HAND);
-            if (offHand != null) {
-                double scale = (double) charSize / 64.0;
-                int sx = charX + (int)(14 * scale);
-                int sy = charY + (int)(34 * scale);
-                int sw = (int)(15 * scale);
-                int sh = (int)(20 * scale);
-                g2.setColor(new Color(160, 180, 205));
-                int[] xs = { sx + sw / 2, sx, sx, sx + sw, sx + sw };
-                int[] ys = { sy + sh, sy + 3, sy, sy, sy + 3 };
-                g2.fillPolygon(xs, ys, 5);
-                g2.setColor(new Color(220, 180, 60));
-                g2.fillOval(sx + sw / 2 - 3, sy + sh / 2 - 3, 5, 5);
-                g2.setColor(new Color(70, 90, 120));
-                g2.drawPolygon(xs, ys, 5);
             }
         }
 

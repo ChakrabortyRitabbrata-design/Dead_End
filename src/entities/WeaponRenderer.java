@@ -8,6 +8,7 @@ import main.GamePanel;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
@@ -157,6 +158,11 @@ public class WeaponRenderer {
 
         g2.setTransform(old);
 
+        // Slash arc effect during weapon swing
+        if (isAttacking() && state == AttackState.SWING && !wantBehind) {
+            drawSlashArc(g2, hx, hy, dir, scale);
+        }
+
         // Impact flash during attack
         if (isAttacking() && state == AttackState.IMPACT && attackFrame < 4 && !wantBehind) {
             drawImpactFlash(g2, hx, hy, dir, w.weaponClass);
@@ -291,12 +297,63 @@ public class WeaponRenderer {
         g2.fillRect(hx - 2, shaftTop - 1, 4, 3);
     }
 
+    private void drawSlashArc(Graphics2D g2, int hx, int hy, Direction dir, double scale) {
+        float t = attackFrame / (float) SWING_FRAMES;
+        float alpha = (float) Math.sin(t * Math.PI) * 0.95f;
+        if (alpha <= 0.05f) return;
+
+        Composite oldComp = g2.getComposite();
+        g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+
+        int arcRadius = (int) (38 * scale);
+        int centerX = hx;
+        int centerY = hy;
+
+        int startAngle;
+        int arcExtent;
+        switch (dir) {
+            case DOWN -> {
+                centerY += (int)(6 * scale);
+                startAngle = 200;
+                arcExtent = 140;
+            }
+            case UP -> {
+                centerY -= (int)(6 * scale);
+                startAngle = 20;
+                arcExtent = 140;
+            }
+            case LEFT -> {
+                centerX -= (int)(6 * scale);
+                startAngle = 110;
+                arcExtent = 140;
+            }
+            default -> { // RIGHT
+                centerX += (int)(6 * scale);
+                startAngle = 290;
+                arcExtent = 140;
+            }
+        }
+
+        // Outer bright blue-white glow
+        g2.setColor(new Color(180, 220, 255, 150));
+        g2.setStroke(new BasicStroke((float)(6 * scale), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.drawArc(centerX - arcRadius, centerY - arcRadius, arcRadius * 2, arcRadius * 2, startAngle, arcExtent);
+
+        // Core sharp white blade slash
+        g2.setColor(new Color(255, 255, 255, 240));
+        g2.setStroke(new BasicStroke((float)(2.5 * scale), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.drawArc(centerX - arcRadius, centerY - arcRadius, arcRadius * 2, arcRadius * 2, startAngle + 10, arcExtent - 20);
+
+        g2.setStroke(new BasicStroke(1f));
+        g2.setComposite(oldComp);
+    }
+
     private void drawImpactFlash(Graphics2D g2, int hx, int hy, Direction dir, String wClass) {
         float prog   = attackFrame / (float) IMPACT_FRAMES;
         float alpha  = Math.max(0f, 1f - prog);
 
         int fx = hx, fy = hy;
-        int dist = 24;
+        int dist = (int)(24 * (gp != null ? (double)gp.tileSize / 48.0 : 1.0));
         switch (dir) {
             case UP    -> fy -= dist;
             case DOWN  -> fy += dist;
@@ -304,12 +361,29 @@ public class WeaponRenderer {
             case RIGHT -> fx += dist;
         }
 
+        Composite oldComp = g2.getComposite();
         g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-        g2.setColor(new Color(255, 240, 180));
-        g2.fillOval(fx - 6, fy - 6, 12, 12);
+
+        int starSize = (int)(16 * (1.2f - prog * 0.4f));
+
+        // Diagonal star rays (gold/red/yellow)
+        g2.setColor(new Color(255, 210, 80));
+        g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.drawLine(fx - starSize, fy, fx + starSize, fy);
+        g2.drawLine(fx, fy - starSize, fx, fy + starSize);
+
+        int diag = (int)(starSize * 0.7f);
+        g2.setColor(new Color(255, 160, 40));
+        g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.drawLine(fx - diag, fy - diag, fx + diag, fy + diag);
+        g2.drawLine(fx - diag, fy + diag, fx + diag, fy - diag);
+
+        // Bright white center core
         g2.setColor(Color.WHITE);
-        g2.fillOval(fx - 3, fy - 3, 6, 6);
-        g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
+        g2.fillOval(fx - 4, fy - 4, 8, 8);
+
+        g2.setStroke(new BasicStroke(1f));
+        g2.setComposite(oldComp);
     }
 
     private void spawnImpactParticles() {

@@ -76,7 +76,11 @@ public class Player extends Entity {
     private int dodgeDistanceRemaining;
     private int rollDistanceRemaining;
     private boolean attackHitApplied;
-
+    private long blockCooldownNanos = 0;
+    private long blockDurationNanos = 0;
+    private static final long MAX_BLOCK_HOLD_NANOS = 2_000_000_000L;
+    private static final long BLOCK_COOLDOWN_NANOS = 450_000_000L;
+    private int blockEffectTimer = 0;
     // Precision weapon renderer
     private final WeaponRenderer weaponRenderer;
 
@@ -377,7 +381,23 @@ public class Player extends Entity {
         dodgeCooldownNanos = Math.max(0, dodgeCooldownNanos - delta);
         damageInvulnerabilityNanos = Math.max(0, damageInvulnerabilityNanos - delta);
         hurtRemainingNanos = Math.max(0, hurtRemainingNanos - delta);
+        blockCooldownNanos = Math.max(0, blockCooldownNanos - delta);
+        if (blockEffectTimer > 0) blockEffectTimer--;
 
+        // Block duration limit and cooldown logic
+        if (keyH.blockPressed && hasShieldEquipped()) {
+            blockDurationNanos += delta;
+            if (blockDurationNanos >= MAX_BLOCK_HOLD_NANOS) {
+                // Drop block due to fatigue, trigger cooldown
+                blockDurationNanos = 0;
+                blockCooldownNanos = BLOCK_COOLDOWN_NANOS;
+            }
+        } else {
+            if (blockDurationNanos > 0) {
+                blockDurationNanos = 0;
+                blockCooldownNanos = BLOCK_COOLDOWN_NANOS / 2;
+            }
+        }
         if (weaponRenderer != null) {
             weaponRenderer.update();
         }
@@ -628,8 +648,27 @@ public class Player extends Entity {
         return state == AnimationState.KICK ? 20 : 10;
     }
 
+    public boolean hasShieldEquipped() {
+        return gp != null && gp.equipmentManager != null
+                && gp.equipmentManager.getEquipped(EquipmentSlot.OFF_HAND) != null;
+    }
+
     public boolean isBlocking() {
-        return keyH.blockPressed && state == AnimationState.IDLE;
+        return keyH.blockPressed && hasShieldEquipped()
+                && blockCooldownNanos == 0 && state == AnimationState.IDLE;
+    }
+
+    public boolean isFacingTowards(int sourceWorldX, int sourceWorldY) {
+        int dx = sourceWorldX - worldX;
+        int dy = sourceWorldY - worldY;
+        if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0 && facing == Direction.RIGHT) return true;
+            if (dx < 0 && facing == Direction.LEFT) return true;
+        } else {
+            if (dy > 0 && facing == Direction.DOWN) return true;
+            if (dy < 0 && facing == Direction.UP) return true;
+        }
+        return false;
     }
 
     public boolean isDodging() {
@@ -645,21 +684,40 @@ public class Player extends Entity {
     }
 
     public void takeDamage(int damage) {
+        takeDamage(damage, -1, -1);
+    }
+
+    public void takeDamage(int damage, int sourceWorldX, int sourceWorldY) {
         if (health <= 0 || isDodging() || damageInvulnerabilityNanos > 0) {
             return;
         }
+
+        boolean blocked = false;
+        if (isBlocking()) {
+            if (sourceWorldX >= 0 && sourceWorldY >= 0) {
+                blocked = isFacingTowards(sourceWorldX, sourceWorldY);
+            } else {
+                blocked = true;
+            }
+        }
+
+        if (blocked) {
+            // Shield blocks 75% of incoming damage
+            damage = Math.max(1, damage / 4);
+            blockEffectTimer = 14;
+            blockCooldownNanos = BLOCK_COOLDOWN_NANOS;
+        }
+
         int defense = (gp != null && gp.equipmentManager != null)
                 ? gp.equipmentManager.getTotalDefense() : 0;
-        // Shield blocking: reduce damage by 60% when blocking
-        if (isBlocking()) {
-            damage = Math.max(1, damage * 2 / 5);
-        }
         int effectiveDamage = Math.max(1, damage - defense / 2);
         damageInvulnerabilityNanos = DAMAGE_INVULNERABILITY_NANOS;
         hurtRemainingNanos = HURT_LOCK_NANOS;
         health = Math.max(0, health - effectiveDamage);
+
         // Spawn a red damage popup at player screen center
         DamagePopup.spawn(screenX + gp.tileSize / 2, screenY - 10, effectiveDamage, true);
+
         if (health == 0) {
             actionDirection = facing;
             setState(AnimationState.DIE);
@@ -719,125 +777,237 @@ public class Player extends Entity {
         }
     }
 
-    private void drawArmorOverlays(Graphics2D g2, int drawX, int drawY, int drawSize, Direction dir) {
+    public void drawArmorOverlays(Graphics2D g2, int drawX, int drawY, int drawSize, Direction dir) {
         if (gp == null || gp.equipmentManager == null) return;
 
-        double scale = (double) drawSize / 64.0;
-        int cx = drawX + drawSize / 2;
-        if (dir == Direction.LEFT)  cx -= 3;
-        if (dir == Direction.RIGHT) cx += 3;
+        double sc = (double) drawSize / 64.0;
+        int cx = drawX + (int)(32 * sc);
+        if (dir == Direction.LEFT)  cx -= (int)(1 * sc);
+        if (dir == Direction.RIGHT) cx += (int)(1 * sc);
 
-        // â”€â”€ 1. Head (Helmet) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        boolean isSide = (dir == Direction.LEFT || dir == Direction.RIGHT);
+        boolean isLeft = (dir == Direction.LEFT);
+        boolean isBack = (dir == Direction.UP);
+
+        // ── 1. Helmet ────────────────────────────────────────────────────────
         Item head = gp.equipmentManager.getEquipped(EquipmentSlot.HEAD);
         if (head != null) {
-            int topY = drawY + (int) (12 * scale);
-            int hw   = (int) (26 * scale);
-            int hh   = (int) (18 * scale);
+            int topY  = drawY + (int)(13 * sc);
+            int hw    = isSide ? (int)(19 * sc) : (int)(23 * sc);
+            int hh    = (int)(14 * sc);
+            int helmX = cx - hw / 2;
 
-            g2.setColor(new Color(175, 195, 220, 235));
-            g2.fillArc(cx - hw / 2, topY, hw, hh, 0, 180);
-            g2.setColor(new Color(80, 95, 120, 240));
-            g2.setStroke(new BasicStroke(1.5f));
-            g2.drawArc(cx - hw / 2, topY, hw, hh, 0, 180);
-            g2.fillRect(cx - hw / 2 - 1, topY + hh / 2 - 2, hw + 2, 4);
-            if (dir != Direction.UP) {
-                g2.setColor(new Color(15, 20, 30, 250));
-                g2.fillRect(cx - hw / 4, topY + hh / 2 - 1, hw / 2, 2);
+            // Main dome
+            g2.setColor(new Color(175, 192, 215, 235));
+            g2.fillArc(helmX, topY, hw, hh + 2, 0, 180);
+
+            // Metallic light reflection on top
+            g2.setColor(new Color(225, 235, 250, 200));
+            g2.fillArc(helmX + (int)(3*sc), topY + (int)(1*sc), hw - (int)(6*sc), (int)(5*sc), 20, 140);
+
+            // Brow band / brim
+            g2.setColor(new Color(85, 100, 125, 240));
+            g2.fillRect(helmX - 1, topY + hh / 2 + (int)(1*sc), hw + 2, (int)(3*sc));
+
+            // Cheek / side plates
+            if (!isSide && !isBack) {
+                g2.setColor(new Color(150, 170, 195, 220));
+                int cgW = (int)(4 * sc);
+                int cgH = (int)(6 * sc);
+                g2.fillRoundRect(helmX, topY + hh / 2 + (int)(3*sc), cgW, cgH, 2, 2);
+                g2.fillRoundRect(helmX + hw - cgW, topY + hh / 2 + (int)(3*sc), cgW, cgH, 2, 2);
             }
+
+            // Visor slit
+            if (!isBack) {
+                g2.setColor(new Color(12, 16, 26, 245));
+                int sY = topY + hh / 2 + (int)(1*sc);
+                int sW = isSide ? (int)(7 * sc) : (int)(13 * sc);
+                g2.fillRect(cx - sW / 2, sY, sW, (int)(2*sc));
+            }
+
+            // Outline
+            g2.setColor(new Color(60, 75, 95, 230));
+            g2.setStroke(new BasicStroke(Math.max(1f, (float)(1.2*sc))));
+            g2.drawArc(helmX, topY, hw, hh + 2, 0, 180);
             g2.setStroke(new BasicStroke(1f));
         }
 
-        // â”€â”€ 2. Chest (Chestplate) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── 2. Chestplate ────────────────────────────────────────────────────
         Item chest = gp.equipmentManager.getEquipped(EquipmentSlot.CHEST);
         if (chest != null) {
-            int cy = drawY + (int) (26 * scale);
-            int cw = (int) (22 * scale);
-            int ch = (int) (16 * scale);
+            int cy2 = drawY + (int)(29 * sc);
+            int cw  = isSide ? (int)(13 * sc) : (int)(19 * sc);
+            int ch  = (int)(11 * sc);
+            int chestX = cx - cw / 2;
 
-            g2.setColor(new Color(160, 180, 205, 225));
-            g2.fillRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
-            g2.setColor(new Color(75, 90, 115, 230));
-            g2.setStroke(new BasicStroke(1.5f));
-            g2.drawRoundRect(cx - cw / 2, cy, cw, ch, 6, 6);
-            g2.setColor(new Color(130, 150, 180, 230));
-            g2.fillOval(cx - cw / 2 - 3, cy, 7, 7);
-            g2.fillOval(cx + cw / 2 - 4, cy, 7, 7);
+            // Plate body (fitted cuirass over red tunic)
+            g2.setColor(new Color(170, 188, 212, 235));
+            g2.fillRoundRect(chestX, cy2, cw, ch, (int)(3*sc), (int)(3*sc));
+
+            // Highlights
+            g2.setColor(new Color(215, 230, 248, 170));
+            g2.fillRoundRect(chestX + (int)(2*sc), cy2 + (int)(1*sc), cw / 2 - (int)(1*sc), ch - (int)(3*sc), 2, 2);
+
+            // Center ridge
+            if (!isSide) {
+                g2.setColor(new Color(95, 115, 140, 220));
+                g2.fillRect(cx - (int)(0.5*sc), cy2 + (int)(1*sc), (int)(1.5*sc), ch - (int)(2*sc));
+
+                // Shoulder pauldrons
+                int pw = (int)(6 * sc);
+                int ph = (int)(5 * sc);
+                g2.setColor(new Color(155, 175, 200, 230));
+                g2.fillRoundRect(chestX - pw + (int)(2*sc), cy2 - (int)(1*sc), pw, ph, 2, 2);
+                g2.fillRoundRect(chestX + cw - (int)(2*sc), cy2 - (int)(1*sc), pw, ph, 2, 2);
+            }
+
+            // Outline
+            g2.setColor(new Color(65, 80, 105, 220));
+            g2.setStroke(new BasicStroke(Math.max(1f, (float)(1.1*sc))));
+            g2.drawRoundRect(chestX, cy2, cw, ch, (int)(3*sc), (int)(3*sc));
             g2.setStroke(new BasicStroke(1f));
         }
 
-        // â”€â”€ 3. Legs (Leggings) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── 3. Leggings ──────────────────────────────────────────────────────
         Item legs = gp.equipmentManager.getEquipped(EquipmentSlot.LEGS);
         if (legs != null) {
-            int ly  = drawY + (int) (42 * scale);
-            int lw  = (int) (8 * scale);
-            int lh  = (int) (10 * scale);
-            int gap = (int) (4 * scale);
+            int ly  = drawY + (int)(42 * sc);
+            int lw  = (int)(7 * sc);
+            int lh  = (int)(9 * sc);
+            int gap = (int)(4 * sc);
 
-            g2.setColor(new Color(145, 165, 190, 220));
-            g2.fillRoundRect(cx - lw - gap / 2, ly, lw, lh, 4, 4);
-            g2.fillRoundRect(cx + gap / 2, ly, lw, lh, 4, 4);
-            g2.setColor(new Color(80, 95, 120, 230));
-            g2.fillRect(cx - lw - gap / 2, ly, lw * 2 + gap, 3);
+            if (isSide) {
+                int lx = cx - lw / 2;
+                g2.setColor(new Color(145, 165, 190, 230));
+                g2.fillRoundRect(lx, ly, lw, lh, 2, 2);
+                g2.setColor(new Color(195, 212, 232, 160));
+                g2.fillRect(lx + (int)(1*sc), ly + (int)(1*sc), (int)(2*sc), lh - (int)(2*sc));
+            } else {
+                int leftLegX  = cx - lw - gap / 2;
+                int rightLegX = cx + gap / 2;
+                g2.setColor(new Color(145, 165, 190, 230));
+                g2.fillRoundRect(leftLegX, ly, lw, lh, 2, 2);
+                g2.fillRoundRect(rightLegX, ly, lw, lh, 2, 2);
+
+                g2.setColor(new Color(195, 212, 232, 160));
+                g2.fillRect(leftLegX + (int)(1*sc), ly + (int)(1*sc), (int)(2*sc), lh - (int)(2*sc));
+                g2.fillRect(rightLegX + (int)(1*sc), ly + (int)(1*sc), (int)(2*sc), lh - (int)(2*sc));
+            }
         }
 
-        // â”€â”€ 4. Feet (Boots) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── 4. Boots ─────────────────────────────────────────────────────────
         Item feet = gp.equipmentManager.getEquipped(EquipmentSlot.FEET);
         if (feet != null) {
-            int by   = drawY + (int) (52 * scale);
-            int bw   = (int) (9 * scale);
-            int bh   = (int) (8 * scale);
-            int bgap = (int) (4 * scale);
+            int by   = drawY + (int)(52 * sc);
+            int bw   = (int)(8 * sc);
+            int bh   = (int)(8 * sc);
+            int bgap = (int)(4 * sc);
 
-            g2.setColor(new Color(70, 80, 95, 240));
-            g2.fillRoundRect(cx - bw - bgap / 2, by, bw, bh, 4, 4);
-            g2.fillRoundRect(cx + bgap / 2, by, bw, bh, 4, 4);
-            g2.setColor(new Color(175, 195, 220, 240));
-            g2.fillRect(cx - bw - bgap / 2, by + bh - 2, bw, 2);
-            g2.fillRect(cx + bgap / 2, by + bh - 2, bw, 2);
+            if (isSide) {
+                int bx = cx - bw / 2;
+                g2.setColor(new Color(80, 95, 118, 240));
+                g2.fillRoundRect(bx, by, bw, bh, 2, 2);
+                // Metal toe plate
+                g2.setColor(new Color(185, 202, 222, 230));
+                g2.fillRect(bx + (int)(1*sc), by + bh - (int)(3*sc), bw - (int)(2*sc), (int)(2*sc));
+            } else {
+                int leftBootX  = cx - bw - bgap / 2;
+                int rightBootX = cx + bgap / 2;
+                g2.setColor(new Color(80, 95, 118, 240));
+                g2.fillRoundRect(leftBootX, by, bw, bh, 2, 2);
+                g2.fillRoundRect(rightBootX, by, bw, bh, 2, 2);
+
+                // Metal toe plates
+                g2.setColor(new Color(185, 202, 222, 230));
+                g2.fillRect(leftBootX + (int)(1*sc), by + bh - (int)(3*sc), bw - (int)(2*sc), (int)(2*sc));
+                g2.fillRect(rightBootX + (int)(1*sc), by + bh - (int)(3*sc), bw - (int)(2*sc), (int)(2*sc));
+            }
         }
     }
 
-    private void drawOffHand(Graphics2D g2, int drawX, int drawY, int drawSize, Direction dir) {
+    public void drawOffHand(Graphics2D g2, int drawX, int drawY, int drawSize, Direction dir) {
         if (gp == null || gp.equipmentManager == null) return;
         Item offHand = gp.equipmentManager.getEquipped(EquipmentSlot.OFF_HAND);
         if (offHand == null) return;
 
-        double scale = (double) drawSize / 64.0;
+        double sc = (double) drawSize / 64.0;
+        int sw = (int)(16 * sc);
+        int sh = (int)(20 * sc);
         int sx, sy;
-        int sw = (int)(15 * scale);
-        int sh = (int)(20 * scale);
 
         if (isBlocking()) {
+            // Shield thrust forward in front of body
             sx = drawX + drawSize / 2 - sw / 2;
-            sy = drawY + (int)(30 * scale);
+            sy = drawY + (int)(28 * sc);
         } else {
-            // Anchor to left hand position
+            // Resting position: anchor to off-hand side
             switch (dir) {
-                case UP    -> { sx = drawX + (int)(15 * scale); sy = drawY + (int)(32 * scale); }
-                case DOWN  -> { sx = drawX + (int)(14 * scale); sy = drawY + (int)(34 * scale); }
-                case LEFT  -> { sx = drawX + (int)(28 * scale); sy = drawY + (int)(34 * scale); }
-                default    -> { sx = drawX + (int)(16 * scale); sy = drawY + (int)(34 * scale); } // RIGHT
+                case UP    -> { sx = drawX + (int)(14 * sc); sy = drawY + (int)(30 * sc); }
+                case DOWN  -> { sx = drawX + (int)(13 * sc); sy = drawY + (int)(32 * sc); }
+                case LEFT  -> { sx = drawX + (int)(26 * sc); sy = drawY + (int)(32 * sc); }
+                default    -> { sx = drawX + (int)(15 * sc); sy = drawY + (int)(32 * sc); }
             }
         }
 
-        g2.setColor(new Color(160, 180, 205));
-        int[] xs = { sx + sw / 2, sx, sx, sx + sw, sx + sw };
-        int[] ys = { sy + sh, sy + 3, sy, sy, sy + 3 };
-        g2.fillPolygon(xs, ys, 5);
+        // ── Draw shield: round wooden body + metal rim + gold boss ────────────
+        int rx = sw / 2;  // radius x
+        int ry = sh / 2;  // radius y
 
-        g2.setColor(new Color(220, 180, 60));
-        g2.fillOval(sx + sw / 2 - 3, sy + sh / 2 - 3, 6, 6);
+        // Wooden body (brown)
+        g2.setColor(new Color(130, 90, 50, 230));
+        g2.fillOval(sx, sy, sw, sh);
 
-        g2.setColor(new Color(70, 90, 120));
-        g2.setStroke(new BasicStroke(1.2f));
-        g2.drawPolygon(xs, ys, 5);
+        // Wood grain lines
+        g2.setColor(new Color(100, 68, 35, 180));
+        g2.setStroke(new BasicStroke(Math.max(1f, (float)(0.8*sc))));
+        for (int grain = 1; grain < 3; grain++) {
+            int gx = sx + sw/4 * grain;
+            g2.drawLine(gx, sy + (int)(2*sc), gx, sy + sh - (int)(2*sc));
+        }
+
+        // Metal rim
+        g2.setColor(new Color(160, 175, 195, 240));
+        g2.setStroke(new BasicStroke(Math.max(1.5f, (float)(2*sc))));
+        g2.drawOval(sx, sy, sw, sh);
+
+        // Metal cross straps
+        g2.setColor(new Color(140, 160, 185, 200));
+        g2.setStroke(new BasicStroke(Math.max(1f, (float)(1.5*sc))));
+        g2.drawLine(sx + sw/2, sy + (int)(2*sc), sx + sw/2, sy + sh - (int)(2*sc));
+        g2.drawLine(sx + (int)(2*sc), sy + sh/2, sx + sw - (int)(2*sc), sy + sh/2);
+
+        // Gold center boss
+        int bossSize = (int)(6 * sc);
+        g2.setColor(new Color(220, 185, 50, 255));
+        g2.fillOval(sx + sw/2 - bossSize/2, sy + sh/2 - bossSize/2, bossSize, bossSize);
+        // Boss highlight
+        g2.setColor(new Color(255, 230, 120, 200));
+        g2.fillOval(sx + sw/2 - bossSize/2 + (int)(1*sc),
+                    sy + sh/2 - bossSize/2 + (int)(1*sc),
+                    (int)(2*sc), (int)(2*sc));
+        // Boss rim
+        g2.setColor(new Color(160, 125, 20, 240));
+        g2.setStroke(new BasicStroke(Math.max(1f, (float)(0.8*sc))));
+        g2.drawOval(sx + sw/2 - bossSize/2, sy + sh/2 - bossSize/2, bossSize, bossSize);
+
+        // Blocking flash: bright blue-white rim when blocking
+        if (isBlocking()) {
+            g2.setColor(new Color(180, 220, 255, 200));
+            g2.setStroke(new BasicStroke(Math.max(2f, (float)(3*sc))));
+            g2.drawOval(sx - (int)(2*sc), sy - (int)(2*sc), sw + (int)(4*sc), sh + (int)(4*sc));
+        }
         g2.setStroke(new BasicStroke(1f));
     }
 
     public BufferedImage getPlayerPreviewImage() {
+        return getDirectionalIdleFrame(Direction.DOWN);
+    }
+
+    public BufferedImage getDirectionalIdleFrame(Direction dir) {
         try {
-            if (animations != null && animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()] != null) {
-                return animations[Direction.DOWN.ordinal()][AnimationState.IDLE.ordinal()].getFrame(0).getImage();
+            if (animations != null && animations[dir.ordinal()][AnimationState.IDLE.ordinal()] != null) {
+                return animations[dir.ordinal()][AnimationState.IDLE.ordinal()].getFrame(0).getImage();
             }
         } catch (Exception ignored) {
         }

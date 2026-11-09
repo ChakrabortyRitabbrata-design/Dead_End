@@ -104,6 +104,8 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             rollPressed = true;
         } else if (code == KeyEvent.VK_SHIFT) {
             runPressed = true;
+        } else if (code == KeyEvent.VK_R) {
+            blockPressed = true;
         }
     }
 
@@ -132,6 +134,8 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             rollPressed = false;
         } else if (code == KeyEvent.VK_SHIFT) {
             runPressed = false;
+        } else if (code == KeyEvent.VK_R) {
+            blockPressed = false;
         }
     }
 
