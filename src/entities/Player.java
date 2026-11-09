@@ -785,143 +785,48 @@ public class Player extends Entity {
         if (dir == Direction.LEFT)  cx -= (int)(1 * sc);
         if (dir == Direction.RIGHT) cx += (int)(1 * sc);
 
-        boolean isSide = (dir == Direction.LEFT || dir == Direction.RIGHT);
-        boolean isLeft = (dir == Direction.LEFT);
-        boolean isBack = (dir == Direction.UP);
-
-        // ── 1. Helmet ────────────────────────────────────────────────────────
-        Item head = gp.equipmentManager.getEquipped(EquipmentSlot.HEAD);
-        if (head != null) {
-            int topY  = drawY + (int)(13 * sc);
-            int hw    = isSide ? (int)(19 * sc) : (int)(23 * sc);
-            int hh    = (int)(14 * sc);
-            int helmX = cx - hw / 2;
-
-            // Main dome
-            g2.setColor(new Color(175, 192, 215, 235));
-            g2.fillArc(helmX, topY, hw, hh + 2, 0, 180);
-
-            // Metallic light reflection on top
-            g2.setColor(new Color(225, 235, 250, 200));
-            g2.fillArc(helmX + (int)(3*sc), topY + (int)(1*sc), hw - (int)(6*sc), (int)(5*sc), 20, 140);
-
-            // Brow band / brim
-            g2.setColor(new Color(85, 100, 125, 240));
-            g2.fillRect(helmX - 1, topY + hh / 2 + (int)(1*sc), hw + 2, (int)(3*sc));
-
-            // Cheek / side plates
-            if (!isSide && !isBack) {
-                g2.setColor(new Color(150, 170, 195, 220));
-                int cgW = (int)(4 * sc);
-                int cgH = (int)(6 * sc);
-                g2.fillRoundRect(helmX, topY + hh / 2 + (int)(3*sc), cgW, cgH, 2, 2);
-                g2.fillRoundRect(helmX + hw - cgW, topY + hh / 2 + (int)(3*sc), cgW, cgH, 2, 2);
-            }
-
-            // Visor slit
-            if (!isBack) {
-                g2.setColor(new Color(12, 16, 26, 245));
-                int sY = topY + hh / 2 + (int)(1*sc);
-                int sW = isSide ? (int)(7 * sc) : (int)(13 * sc);
-                g2.fillRect(cx - sW / 2, sY, sW, (int)(2*sc));
-            }
-
-            // Outline
-            g2.setColor(new Color(60, 75, 95, 230));
-            g2.setStroke(new BasicStroke(Math.max(1f, (float)(1.2*sc))));
-            g2.drawArc(helmX, topY, hw, hh + 2, 0, 180);
-            g2.setStroke(new BasicStroke(1f));
-        }
-
-        // ── 2. Chestplate ────────────────────────────────────────────────────
-        Item chest = gp.equipmentManager.getEquipped(EquipmentSlot.CHEST);
-        if (chest != null) {
-            int cy2 = drawY + (int)(29 * sc);
-            int cw  = isSide ? (int)(13 * sc) : (int)(19 * sc);
-            int ch  = (int)(11 * sc);
-            int chestX = cx - cw / 2;
-
-            // Plate body (fitted cuirass over red tunic)
-            g2.setColor(new Color(170, 188, 212, 235));
-            g2.fillRoundRect(chestX, cy2, cw, ch, (int)(3*sc), (int)(3*sc));
-
-            // Highlights
-            g2.setColor(new Color(215, 230, 248, 170));
-            g2.fillRoundRect(chestX + (int)(2*sc), cy2 + (int)(1*sc), cw / 2 - (int)(1*sc), ch - (int)(3*sc), 2, 2);
-
-            // Center ridge
-            if (!isSide) {
-                g2.setColor(new Color(95, 115, 140, 220));
-                g2.fillRect(cx - (int)(0.5*sc), cy2 + (int)(1*sc), (int)(1.5*sc), ch - (int)(2*sc));
-
-                // Shoulder pauldrons
-                int pw = (int)(6 * sc);
-                int ph = (int)(5 * sc);
-                g2.setColor(new Color(155, 175, 200, 230));
-                g2.fillRoundRect(chestX - pw + (int)(2*sc), cy2 - (int)(1*sc), pw, ph, 2, 2);
-                g2.fillRoundRect(chestX + cw - (int)(2*sc), cy2 - (int)(1*sc), pw, ph, 2, 2);
-            }
-
-            // Outline
-            g2.setColor(new Color(65, 80, 105, 220));
-            g2.setStroke(new BasicStroke(Math.max(1f, (float)(1.1*sc))));
-            g2.drawRoundRect(chestX, cy2, cw, ch, (int)(3*sc), (int)(3*sc));
-            g2.setStroke(new BasicStroke(1f));
-        }
-
-        // ── 3. Leggings ──────────────────────────────────────────────────────
+        // 1. Leggings (layered under chestplate and boots)
         Item legs = gp.equipmentManager.getEquipped(EquipmentSlot.LEGS);
         if (legs != null) {
-            int ly  = drawY + (int)(42 * sc);
-            int lw  = (int)(7 * sc);
-            int lh  = (int)(9 * sc);
-            int gap = (int)(4 * sc);
-
-            if (isSide) {
-                int lx = cx - lw / 2;
-                g2.setColor(new Color(145, 165, 190, 230));
-                g2.fillRoundRect(lx, ly, lw, lh, 2, 2);
-                g2.setColor(new Color(195, 212, 232, 160));
-                g2.fillRect(lx + (int)(1*sc), ly + (int)(1*sc), (int)(2*sc), lh - (int)(2*sc));
-            } else {
-                int leftLegX  = cx - lw - gap / 2;
-                int rightLegX = cx + gap / 2;
-                g2.setColor(new Color(145, 165, 190, 230));
-                g2.fillRoundRect(leftLegX, ly, lw, lh, 2, 2);
-                g2.fillRoundRect(rightLegX, ly, lw, lh, 2, 2);
-
-                g2.setColor(new Color(195, 212, 232, 160));
-                g2.fillRect(leftLegX + (int)(1*sc), ly + (int)(1*sc), (int)(2*sc), lh - (int)(2*sc));
-                g2.fillRect(rightLegX + (int)(1*sc), ly + (int)(1*sc), (int)(2*sc), lh - (int)(2*sc));
+            BufferedImage legSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.LEGS, dir);
+            if (legSprite != null) {
+                int lw = (int)(19 * sc);
+                int lh = (int)(18 * sc);
+                g2.drawImage(legSprite, cx - lw / 2, drawY + (int)(40 * sc), lw, lh, null);
             }
         }
 
-        // ── 4. Boots ─────────────────────────────────────────────────────────
+        // 2. Boots
         Item feet = gp.equipmentManager.getEquipped(EquipmentSlot.FEET);
         if (feet != null) {
-            int by   = drawY + (int)(52 * sc);
-            int bw   = (int)(8 * sc);
-            int bh   = (int)(8 * sc);
-            int bgap = (int)(4 * sc);
+            BufferedImage bootSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.FEET, dir);
+            if (bootSprite != null) {
+                int bw = (int)(18 * sc);
+                int bh = (int)(15 * sc);
+                g2.drawImage(bootSprite, cx - bw / 2, drawY + (int)(51 * sc), bw, bh, null);
+            }
+        }
 
-            if (isSide) {
-                int bx = cx - bw / 2;
-                g2.setColor(new Color(80, 95, 118, 240));
-                g2.fillRoundRect(bx, by, bw, bh, 2, 2);
-                // Metal toe plate
-                g2.setColor(new Color(185, 202, 222, 230));
-                g2.fillRect(bx + (int)(1*sc), by + bh - (int)(3*sc), bw - (int)(2*sc), (int)(2*sc));
-            } else {
-                int leftBootX  = cx - bw - bgap / 2;
-                int rightBootX = cx + bgap / 2;
-                g2.setColor(new Color(80, 95, 118, 240));
-                g2.fillRoundRect(leftBootX, by, bw, bh, 2, 2);
-                g2.fillRoundRect(rightBootX, by, bw, bh, 2, 2);
+        // 3. Chestplate
+        Item chest = gp.equipmentManager.getEquipped(EquipmentSlot.CHEST);
+        if (chest != null) {
+            BufferedImage chestSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.CHEST, dir);
+            if (chestSprite != null) {
+                int cw = (int)(22 * sc);
+                int ch = (int)(20 * sc);
+                g2.drawImage(chestSprite, cx - cw / 2, drawY + (int)(27 * sc), cw, ch, null);
+            }
+        }
 
-                // Metal toe plates
-                g2.setColor(new Color(185, 202, 222, 230));
-                g2.fillRect(leftBootX + (int)(1*sc), by + bh - (int)(3*sc), bw - (int)(2*sc), (int)(2*sc));
-                g2.fillRect(rightBootX + (int)(1*sc), by + bh - (int)(3*sc), bw - (int)(2*sc), (int)(2*sc));
+        // 4. Helmet
+        Item head = gp.equipmentManager.getEquipped(EquipmentSlot.HEAD);
+        if (head != null) {
+            BufferedImage helmSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.HEAD, dir);
+            if (helmSprite != null) {
+                int hw = (int)(24 * sc);
+                int hh = (int)(24 * sc);
+                int hy = (dir == Direction.DOWN) ? drawY + (int)(11 * sc) : drawY + (int)(9 * sc);
+                g2.drawImage(helmSprite, cx - hw / 2, hy, hw, hh, null);
             }
         }
     }
@@ -932,72 +837,36 @@ public class Player extends Entity {
         if (offHand == null) return;
 
         double sc = (double) drawSize / 64.0;
-        int sw = (int)(16 * sc);
-        int sh = (int)(20 * sc);
+        int sw = (int)(18 * sc);
+        int sh = (int)(22 * sc);
         int sx, sy;
 
         if (isBlocking()) {
-            // Shield thrust forward in front of body
+            // Thrust forward in blocking stance
             sx = drawX + drawSize / 2 - sw / 2;
             sy = drawY + (int)(28 * sc);
         } else {
-            // Resting position: anchor to off-hand side
+            // Anchor to off-hand side
             switch (dir) {
-                case UP    -> { sx = drawX + (int)(14 * sc); sy = drawY + (int)(30 * sc); }
-                case DOWN  -> { sx = drawX + (int)(13 * sc); sy = drawY + (int)(32 * sc); }
-                case LEFT  -> { sx = drawX + (int)(26 * sc); sy = drawY + (int)(32 * sc); }
-                default    -> { sx = drawX + (int)(15 * sc); sy = drawY + (int)(32 * sc); }
+                case UP    -> { sx = drawX + (int)(12 * sc); sy = drawY + (int)(30 * sc); }
+                case DOWN  -> { sx = drawX + (int)(12 * sc); sy = drawY + (int)(31 * sc); }
+                case LEFT  -> { sx = drawX + (int)(26 * sc); sy = drawY + (int)(31 * sc); }
+                default    -> { sx = drawX + (int)(14 * sc); sy = drawY + (int)(31 * sc); } // RIGHT
             }
         }
 
-        // ── Draw shield: round wooden body + metal rim + gold boss ────────────
-        int rx = sw / 2;  // radius x
-        int ry = sh / 2;  // radius y
-
-        // Wooden body (brown)
-        g2.setColor(new Color(130, 90, 50, 230));
-        g2.fillOval(sx, sy, sw, sh);
-
-        // Wood grain lines
-        g2.setColor(new Color(100, 68, 35, 180));
-        g2.setStroke(new BasicStroke(Math.max(1f, (float)(0.8*sc))));
-        for (int grain = 1; grain < 3; grain++) {
-            int gx = sx + sw/4 * grain;
-            g2.drawLine(gx, sy + (int)(2*sc), gx, sy + sh - (int)(2*sc));
+        BufferedImage shieldSprite = EquipmentSpriteSheet.getSprite(EquipmentSlot.OFF_HAND, dir);
+        if (shieldSprite != null) {
+            g2.drawImage(shieldSprite, sx, sy, sw, sh, null);
         }
 
-        // Metal rim
-        g2.setColor(new Color(160, 175, 195, 240));
-        g2.setStroke(new BasicStroke(Math.max(1.5f, (float)(2*sc))));
-        g2.drawOval(sx, sy, sw, sh);
-
-        // Metal cross straps
-        g2.setColor(new Color(140, 160, 185, 200));
-        g2.setStroke(new BasicStroke(Math.max(1f, (float)(1.5*sc))));
-        g2.drawLine(sx + sw/2, sy + (int)(2*sc), sx + sw/2, sy + sh - (int)(2*sc));
-        g2.drawLine(sx + (int)(2*sc), sy + sh/2, sx + sw - (int)(2*sc), sy + sh/2);
-
-        // Gold center boss
-        int bossSize = (int)(6 * sc);
-        g2.setColor(new Color(220, 185, 50, 255));
-        g2.fillOval(sx + sw/2 - bossSize/2, sy + sh/2 - bossSize/2, bossSize, bossSize);
-        // Boss highlight
-        g2.setColor(new Color(255, 230, 120, 200));
-        g2.fillOval(sx + sw/2 - bossSize/2 + (int)(1*sc),
-                    sy + sh/2 - bossSize/2 + (int)(1*sc),
-                    (int)(2*sc), (int)(2*sc));
-        // Boss rim
-        g2.setColor(new Color(160, 125, 20, 240));
-        g2.setStroke(new BasicStroke(Math.max(1f, (float)(0.8*sc))));
-        g2.drawOval(sx + sw/2 - bossSize/2, sy + sh/2 - bossSize/2, bossSize, bossSize);
-
-        // Blocking flash: bright blue-white rim when blocking
-        if (isBlocking()) {
-            g2.setColor(new Color(180, 220, 255, 200));
-            g2.setStroke(new BasicStroke(Math.max(2f, (float)(3*sc))));
+        // Blocking flash ring effect
+        if (isBlocking() || blockEffectTimer > 0) {
+            g2.setColor(new Color(180, 220, 255, 180));
+            g2.setStroke(new BasicStroke(Math.max(2f, (float)(2.5 * sc))));
             g2.drawOval(sx - (int)(2*sc), sy - (int)(2*sc), sw + (int)(4*sc), sh + (int)(4*sc));
+            g2.setStroke(new BasicStroke(1f));
         }
-        g2.setStroke(new BasicStroke(1f));
     }
 
     public BufferedImage getPlayerPreviewImage() {
