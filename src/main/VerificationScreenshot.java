@@ -1,5 +1,6 @@
 package main;
 
+import animation.Animation;
 import animation.AnimationState;
 import animation.Direction;
 import entities.Player;
@@ -16,14 +17,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import javax.imageio.ImageIO;
 
-/**
- * Generates an authoritative verification image displaying:
- * - Original character in four directions (bare hands)
- * - Original character in four directions (holding Iron Sword with hand attachment)
- * - Original character in four directions (Sword + Shield)
- * - Original character in four directions (Full Gear: Helmet, Chestplate, Leggings, Boots, Shield, Sword)
- * - Shield block and sword slash effects
- */
 public class VerificationScreenshot {
 
     public static void main(String[] args) {
@@ -40,17 +33,16 @@ public class VerificationScreenshot {
         Armor shield     = new Armor("Basic Shield", "Shield with gold boss", 12, "Shield", EquipmentSlot.OFF_HAND);
 
         int cols = 4; // DOWN, LEFT, RIGHT, UP
-        int rows = 4;
-        int cellW = 180;
-        int cellH = 180;
-        int headerH = 70;
+        int rows = 6;
+        int cellW = 185;
+        int cellH = 185;
+        int headerH = 75;
         int width  = cols * cellW + 40;
         int height = rows * cellH + headerH + 30;
 
         BufferedImage canvas = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = canvas.createGraphics();
 
-        // High quality hints
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -65,12 +57,12 @@ public class VerificationScreenshot {
 
         g2.setColor(new Color(170, 185, 215));
         g2.setFont(new Font("Arial", Font.PLAIN, 13));
-        g2.drawString("Original purple-haired character | Precision hand attachment | Direction-synchronized armor layers", 24, 56);
+        g2.drawString("Full-Coverage Closed Helmet | Snug-Fit Body Armor | Directional Attack & Shield Animation", 24, 56);
 
         Direction[] directions = { Direction.DOWN, Direction.LEFT, Direction.RIGHT, Direction.UP };
-        String[] dirNames = { "DOWN (Front)", "LEFT", "RIGHT", "UP (Back)" };
+        String[] dirNames = { "DOWN (Front)", "LEFT (Side)", "RIGHT (Side)", "UP (Back)" };
 
-        int renderSize = 100; // character render size in pixels
+        int renderSize = 105;
 
         for (int r = 0; r < rows; r++) {
             // Configure equipment for this row
@@ -82,8 +74,12 @@ public class VerificationScreenshot {
             gp.equipmentManager.unequip(EquipmentSlot.FEET);
 
             String rowLabel;
+            AnimationState state = AnimationState.IDLE;
+            int frameIdx = 0;
+            boolean blockStance = false;
+
             if (r == 0) {
-                rowLabel = "1. Bare-Handed (Original Character Base)";
+                rowLabel = "1. Bare-Handed (Original Base Character)";
             } else if (r == 1) {
                 rowLabel = "2. Equipped: Iron Sword (Hand-Anchored)";
                 gp.equipmentManager.equip(EquipmentSlot.MAIN_HAND, ironSword);
@@ -91,14 +87,33 @@ public class VerificationScreenshot {
                 rowLabel = "3. Equipped: Iron Sword + Shield";
                 gp.equipmentManager.equip(EquipmentSlot.MAIN_HAND, ironSword);
                 gp.equipmentManager.equip(EquipmentSlot.OFF_HAND, shield);
-            } else {
-                rowLabel = "4. Full Gear (Helmet + Chestplate + Leggings + Boots + Shield + Sword)";
+            } else if (r == 3) {
+                rowLabel = "4. Full Gear Idle (Whole Helmet Covering Face + Fitted Armor + Sabatons)";
                 gp.equipmentManager.equip(EquipmentSlot.MAIN_HAND, ironSword);
                 gp.equipmentManager.equip(EquipmentSlot.OFF_HAND, shield);
                 gp.equipmentManager.equip(EquipmentSlot.HEAD, helmet);
                 gp.equipmentManager.equip(EquipmentSlot.CHEST, chestplate);
                 gp.equipmentManager.equip(EquipmentSlot.LEGS, leggings);
                 gp.equipmentManager.equip(EquipmentSlot.FEET, boots);
+            } else if (r == 4) {
+                rowLabel = "5. Full Gear Attack Swing (Dynamic Armor Movement in Fight Directions)";
+                gp.equipmentManager.equip(EquipmentSlot.MAIN_HAND, ironSword);
+                gp.equipmentManager.equip(EquipmentSlot.OFF_HAND, shield);
+                gp.equipmentManager.equip(EquipmentSlot.HEAD, helmet);
+                gp.equipmentManager.equip(EquipmentSlot.CHEST, chestplate);
+                gp.equipmentManager.equip(EquipmentSlot.LEGS, leggings);
+                gp.equipmentManager.equip(EquipmentSlot.FEET, boots);
+                state = AnimationState.PUNCH;
+                frameIdx = 2; // Full attack swing extension frame
+            } else {
+                rowLabel = "6. Full Gear Shield Block (Active Defense Stance)";
+                gp.equipmentManager.equip(EquipmentSlot.MAIN_HAND, ironSword);
+                gp.equipmentManager.equip(EquipmentSlot.OFF_HAND, shield);
+                gp.equipmentManager.equip(EquipmentSlot.HEAD, helmet);
+                gp.equipmentManager.equip(EquipmentSlot.CHEST, chestplate);
+                gp.equipmentManager.equip(EquipmentSlot.LEGS, leggings);
+                gp.equipmentManager.equip(EquipmentSlot.FEET, boots);
+                blockStance = true;
             }
 
             int rowY = headerH + r * cellH;
@@ -132,40 +147,56 @@ public class VerificationScreenshot {
                 g2.setColor(new Color(10, 12, 18, 160));
                 g2.fillOval(charDrawX + renderSize / 2 - 28, charDrawY + renderSize - 18, 56, 14);
 
-                // Render character layers:
-                // 1. Rear weapon if UP
+                // Get character sprite for state & direction
+                BufferedImage charSprite = null;
+                try {
+                    java.lang.reflect.Field f = Player.class.getDeclaredField("animations");
+                    f.setAccessible(true);
+                    Animation[][] anims = (Animation[][]) f.get(player);
+                    Animation anim = anims[dir.ordinal()][state.ordinal()];
+                    if (anim != null) {
+                        int fCount = anim.getFrameCount();
+                        int fIdx = Math.min(frameIdx, fCount - 1);
+                        charSprite = anim.getFrame(fIdx).getImage();
+                    }
+                } catch (Exception ignored) {}
+                if (charSprite == null) {
+                    charSprite = player.getDirectionalIdleFrame(dir);
+                }
+
                 Weapon eqW = (Weapon) gp.equipmentManager.getEquipped(EquipmentSlot.MAIN_HAND);
+
+                // 1. Rear weapon if UP
                 if (eqW != null && player.getWeaponRenderer() != null) {
                     player.getWeaponRenderer().drawHandAnchored(g2, charDrawX, charDrawY, renderSize,
-                            AnimationState.IDLE, dir, 0, eqW, "BEHIND");
+                            state, dir, frameIdx, eqW, "BEHIND");
                 }
 
                 // 2. Offhand behind if RIGHT
                 if (dir == Direction.RIGHT) {
-                    player.drawOffHand(g2, charDrawX, charDrawY, renderSize, dir);
+                    player.drawOffHand(g2, charDrawX, charDrawY, renderSize, state, dir, frameIdx);
                 }
 
-                // 3. Original character base sprite
-                BufferedImage sprite = player.getDirectionalIdleFrame(dir);
-                if (sprite != null) {
+                // 3. Base character sprite
+                if (charSprite != null) {
                     Object oldInterp = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
                     g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                    g2.drawImage(sprite, charDrawX, charDrawY, renderSize, renderSize, null);
+                    g2.drawImage(charSprite, charDrawX, charDrawY, renderSize, renderSize, null);
                     if (oldInterp != null) g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterp);
                 }
 
-                // 4. Armor Overlays (Helmet, Chestplate, Leggings, Boots)
-                player.drawArmorOverlays(g2, charDrawX, charDrawY, renderSize, dir);
+                // 4. Armor Overlays
+                player.drawArmorOverlays(g2, charDrawX, charDrawY, renderSize, state, dir, frameIdx);
 
                 // 5. Offhand in front if NOT RIGHT
                 if (dir != Direction.RIGHT) {
-                    player.drawOffHand(g2, charDrawX, charDrawY, renderSize, dir);
+                    player.drawOffHand(g2, charDrawX, charDrawY, renderSize, state, dir, frameIdx);
                 }
 
                 // 6. Front weapon
                 if (eqW != null && player.getWeaponRenderer() != null) {
                     player.getWeaponRenderer().drawHandAnchored(g2, charDrawX, charDrawY, renderSize,
-                            AnimationState.IDLE, dir, 0, eqW, "FRONT");
+                            state, dir, frameIdx, eqW, "FRONT");
                 }
             }
         }

@@ -9,107 +9,106 @@ import javax.imageio.ImageIO;
 
 public class GenerateCleanEquipmentAssets {
 
-    public static BufferedImage removeBackgroundFloodFill(BufferedImage src) {
-        int w = src.getWidth();
-        int h = src.getHeight();
+    public static BufferedImage cleanSprite(BufferedImage raw) {
+        int w = raw.getWidth();
+        int h = raw.getHeight();
         BufferedImage res = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-        
-        int bgR = 0, bgG = 0, bgB = 0, count = 0;
-        int[] borderX = { 0, 1, w-1, w-2 };
-        int[] borderY = { 0, 1, h-1, h-2 };
-        for (int x : borderX) {
-            for (int y : borderY) {
-                int rgb = src.getRGB(x, y);
-                bgR += (rgb >> 16) & 0xFF;
-                bgG += (rgb >> 8) & 0xFF;
-                bgB += rgb & 0xFF;
-                count++;
-            }
+
+        // Get true background color from the 4 corners
+        int[] cx = { 0, w - 1, 0, w - 1 };
+        int[] cy = { 0, 0, h - 1, h - 1 };
+        int bgR = 0, bgG = 0, bgB = 0;
+        for (int i = 0; i < 4; i++) {
+            int rgb = raw.getRGB(cx[i], cy[i]);
+            bgR += (rgb >> 16) & 0xFF;
+            bgG += (rgb >> 8) & 0xFF;
+            bgB += rgb & 0xFF;
         }
-        bgR /= count; bgG /= count; bgB /= count;
-        
+        bgR /= 4; bgG /= 4; bgB /= 4;
+
+        boolean[][] isOuterBg = new boolean[w][h];
         boolean[][] visited = new boolean[w][h];
-        boolean[][] isBackground = new boolean[w][h];
-        Queue<int[]> queue = new ArrayDeque<>();
-        
+        Queue<int[]> q = new ArrayDeque<>();
+
+        // Seed strictly the outer border of the box
         for (int x = 0; x < w; x++) {
-            queue.add(new int[]{x, 0});
-            queue.add(new int[]{x, h - 1});
+            q.add(new int[]{x, 0});
+            q.add(new int[]{x, h - 1});
         }
         for (int y = 0; y < h; y++) {
-            queue.add(new int[]{0, y});
-            queue.add(new int[]{w - 1, y});
+            q.add(new int[]{0, y});
+            q.add(new int[]{w - 1, y});
         }
-        
+
         int[] dx = { 0, 0, 1, -1 };
         int[] dy = { 1, -1, 0, 0 };
-        
-        while (!queue.isEmpty()) {
-            int[] pt = queue.poll();
+
+        while (!q.isEmpty()) {
+            int[] pt = q.poll();
             int x = pt[0], y = pt[1];
             if (x < 0 || x >= w || y < 0 || y >= h) continue;
             if (visited[x][y]) continue;
             visited[x][y] = true;
-            
-            int rgb = src.getRGB(x, y);
+
+            int rgb = raw.getRGB(x, y);
             int r = (rgb >> 16) & 0xFF;
             int g = (rgb >> 8) & 0xFF;
             int b = rgb & 0xFF;
-            
+
             double dist = Math.hypot(Math.hypot(r - bgR, g - bgG), b - bgB);
-            int brightness = (r + g + b) / 3;
-            boolean matchesBg = (dist < 42 && brightness > 130) ||
-                                (r > 165 && g > 155 && b > 170 && Math.abs(r - g) < 28 && Math.abs(r - b) < 28) ||
-                                (r > 200 && g > 200 && b > 200);
-            
-            if (matchesBg) {
-                isBackground[x][y] = true;
+            // Must be close to the grey-purple panel background and NOT dark outline or steel
+            boolean isDarkOutline = (r < 100 && g < 100 && b < 115);
+            boolean isBgColor = (dist < 28) && !isDarkOutline;
+
+            if (isBgColor) {
+                isOuterBg[x][y] = true;
                 for (int i = 0; i < 4; i++) {
-                    int nx = x + dx[i];
-                    int ny = y + dy[i];
+                    int nx = x + dx[i], ny = y + dy[i];
                     if (nx >= 0 && nx < w && ny >= 0 && ny < h && !visited[nx][ny]) {
-                        queue.add(new int[]{nx, ny});
+                        q.add(new int[]{nx, ny});
                     }
                 }
             }
         }
-        
+
+        // Fill result: any pixel that is NOT outer background is part of the solid sprite!
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                if (isBackground[x][y]) {
+                if (isOuterBg[x][y]) {
                     res.setRGB(x, y, 0x00000000);
                 } else {
-                    res.setRGB(x, y, 0xFF000000 | (src.getRGB(x, y) & 0xFFFFFF));
+                    res.setRGB(x, y, 0xFF000000 | (raw.getRGB(x, y) & 0xFFFFFF));
                 }
             }
         }
 
-        // Post-filter: keep only the main central component (removes any stray border artifacts from neighboring boxes)
+        // Remove any disconnected border noise from neighboring box dividers (keep only main connected component)
         boolean[][] kept = new boolean[w][h];
-        Queue<int[]> compQueue = new ArrayDeque<>();
+        Queue<int[]> compQ = new ArrayDeque<>();
         int midX = w / 2, midY = h / 2;
-        // Find a solid pixel near the center
         boolean foundSeed = false;
-        for (int r = 0; r <= 8 && !foundSeed; r++) {
+        for (int r = 0; r <= 10 && !foundSeed; r++) {
             for (int dy2 = -r; dy2 <= r && !foundSeed; dy2++) {
                 for (int dx2 = -r; dx2 <= r && !foundSeed; dx2++) {
                     int sx = midX + dx2, sy = midY + dy2;
-                    if (sx >= 0 && sx < w && sy >= 0 && sy < h && !isBackground[sx][sy]) {
-                        compQueue.add(new int[]{sx, sy});
+                    if (sx >= 0 && sx < w && sy >= 0 && sy < h && !isOuterBg[sx][sy]) {
+                        compQ.add(new int[]{sx, sy});
                         kept[sx][sy] = true;
                         foundSeed = true;
                     }
                 }
             }
         }
-        while (!compQueue.isEmpty()) {
-            int[] pt = compQueue.poll();
+        int[] d8x = { 0, 0, 1, -1, 1, 1, -1, -1 };
+        int[] d8y = { 1, -1, 0, 0, 1, -1, 1, -1 };
+        while (!compQ.isEmpty()) {
+            int[] pt = compQ.poll();
             int px = pt[0], py = pt[1];
-            for (int i = 0; i < 4; i++) {
-                int nx = px + dx[i], ny = py + dy[i];
-                if (nx >= 0 && nx < w && ny >= 0 && ny < h && !isBackground[nx][ny] && !kept[nx][ny]) {
+            for (int i = 0; i < 8; i++) {
+                int nx = px + d8x[i], ny = py + d8y[i];
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h && !isOuterBg[nx][ny] && !kept[nx][ny]) {
                     kept[nx][ny] = true;
-                    compQueue.add(new int[]{nx, ny});
+                    compQ.add(new int[]{nx, ny});
                 }
             }
         }
@@ -139,13 +138,11 @@ public class GenerateCleanEquipmentAssets {
         int boxW = 28;
         int boxH = 28;
         
-        // Exact horizontal centers for each item:
         int[] colsX = { 68, 177, 293, 403 };
         int[] rowsY = { 51, 86, 120, 155 };
         
-        // Exact centers for shield (using clean column 2):
-        int[] shieldColsX = { 88, 91, 91, 88 };
-        int[] shieldRowsY = { 225, 259, 293, 328 };
+        int[] shieldColsX = { 94, 94, 94, 94 };
+        int[] shieldRowsY = { 226, 260, 294, 323 };
         
         String[] fileNames = {
             "equipment_helmet_clean.png",
@@ -176,7 +173,7 @@ public class GenerateCleanEquipmentAssets {
                 if (sy + boxH > panel.getHeight()) sy = panel.getHeight() - boxH;
                 
                 BufferedImage raw = panel.getSubimage(sx, sy, boxW, boxH);
-                BufferedImage clean = removeBackgroundFloodFill(raw);
+                BufferedImage clean = cleanSprite(raw);
                 
                 // Mirror LEFT to RIGHT for helmet and shield
                 if (d == 2 && (item == 0 || item == 4)) {
@@ -185,41 +182,7 @@ public class GenerateCleanEquipmentAssets {
                     int lsx = leftX - boxW/2;
                     int lsy = leftY - boxH/2;
                     BufferedImage leftRaw = panel.getSubimage(lsx, lsy, boxW, boxH);
-                    clean = flipHorizontal(removeBackgroundFloodFill(leftRaw));
-                }
-                
-                // For Helmet DOWN: open face/eyes so hero face shows through
-                if (item == 0 && d == 0) {
-                    BufferedImage openHelm = new BufferedImage(boxW, boxH, BufferedImage.TYPE_INT_ARGB);
-                    for (int y = 0; y < boxH; y++) {
-                        for (int x = 0; x < boxW; x++) {
-                            int rgb = clean.getRGB(x, y);
-                            // Visor cutout: center is at x=13..14
-                            if (y >= 13 && y <= 22 && x >= 8 && x <= 19) {
-                                if (x != 13 && x != 14) {
-                                    openHelm.setRGB(x, y, 0x00000000);
-                                    continue;
-                                }
-                            }
-                            openHelm.setRGB(x, y, rgb);
-                        }
-                    }
-                    clean = openHelm;
-                }
-                
-                // For Helmet LEFT & RIGHT: clear interior white patch so cheek/neck shows through
-                if (item == 0 && (d == 1 || d == 2)) {
-                    for (int y = 14; y < boxH; y++) {
-                        for (int x = 0; x < boxW; x++) {
-                            int rgb = clean.getRGB(x, y);
-                            int r = (rgb >> 16) & 0xFF;
-                            int gr = (rgb >> 8) & 0xFF;
-                            int b = rgb & 0xFF;
-                            if (r > 190 && gr > 190 && b > 190) {
-                                clean.setRGB(x, y, 0x00000000);
-                            }
-                        }
-                    }
+                    clean = flipHorizontal(cleanSprite(leftRaw));
                 }
                 
                 g.drawImage(clean, d * boxW, 0, null);
@@ -230,7 +193,7 @@ public class GenerateCleanEquipmentAssets {
             File binOut = new File(binDir, fileNames[item]);
             ImageIO.write(sheet, "png", resOut);
             ImageIO.write(sheet, "png", binOut);
-            System.out.println("Generated: " + resOut.getName() + " (" + sheet.getWidth() + "x" + sheet.getHeight() + ")");
+            System.out.println("Generated clean authentic equipment: " + resOut.getName() + " (" + sheet.getWidth() + "x" + sheet.getHeight() + ")");
         }
     }
 }
