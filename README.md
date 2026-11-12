@@ -33,6 +33,12 @@ java -cp "bin;res" main.Window
 The game loads assets from the `res` directory when running from the project
 root. The compiled classes are written to `bin`.
 
+On Windows, the game can also be compiled and launched with:
+
+```powershell
+cmd /c ".\run.bat"
+```
+
 ## Controls
 
 | Input | Action |
@@ -43,18 +49,24 @@ root. The compiled classes are written to `bin`.
 | D | Move right |
 | J / Left mouse button | Punch |
 | E / K | Kick |
-| Q / Space | Dodge in the current movement direction |
+| Space | Attack with the equipped weapon |
+| Q | Dodge in the current movement direction |
 | Ctrl | Roll |
 | Shift | Run while moving |
-| Right mouse button | Block / guard |
+| R / Right mouse button | Block / guard with an equipped shield |
 | F | Interact with a nearby ward / travel |
-| M / Escape | Open / close world atlas |
+| Tab | Open / close inventory |
+| 1–9 | Select a hotbar slot; weapon selections equip to the main hand |
+| Escape | Close the inventory or world atlas |
+| M | Open / close world atlas |
 | Scroll / drag / Home | Atlas zoom / pan / fit all |
 | F5 / F9 | Save / load `saves/world.properties` |
 
 Combat actions are edge-triggered, so holding an attack key does not restart an
 animation. The player uses direction-specific idle, walk, run, dodge, roll,
 punch, kick, hurt and death animations. Losing window focus clears held input.
+Inventory items can be dragged between the main inventory, hotbar and equipment
+slots. The gameplay hotbar remains visible during exploration.
 
 ## Gameplay
 
@@ -64,6 +76,9 @@ punch, kick, hurt and death animations. Losing window focus clears held input.
 - Blocking and dodging prevent monster attack damage.
 - Punches and kicks reduce monster health.
 - Each monster displays a health bar and plays a death animation.
+- Player health regenerates at 6 HP per second after 2 seconds without taking
+  damage.
+- After death, press **R** to respawn at the starting position with full health.
 - Authored regions contain persistent enemy encounters; defeated enemies stay
   defeated. Reward values and gate requirements are configurable in
   `res/world/progression.properties`. Power is cumulative and never spent.
