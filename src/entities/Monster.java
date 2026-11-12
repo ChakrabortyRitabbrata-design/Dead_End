@@ -1,5 +1,8 @@
 package entities;
 
+import animation.Direction;
+
+import main.DamagePopup;
 import main.GamePanel;
 
 import java.awt.Color;
@@ -52,6 +55,8 @@ public class Monster {
     private boolean dying;
     private boolean dead;
     private boolean attackDamageApplied;
+    private int hurtFlashCounter;   // frames to flash red after being hit
+    private static final int HURT_FLASH_FRAMES = 8;
 
     public Monster(GamePanel gp, int worldX, int worldY) {
         this.gp = gp;
@@ -232,7 +237,7 @@ public class Monster {
             return;
         }
         lastPlayerAttackSequence = gp.player.attackSequence;
-        takeDamage(gp.player.getAttackDamage());
+        takeDamage(gp.player.getAttackDamage(), gp.player.getFacing());
     }
 
     private void followPlayer() {
@@ -298,8 +303,8 @@ public class Monster {
         if (attackCounter == 12 && !attackDamageApplied
                 && distanceToPlayer() <= attackRange) {
             attackDamageApplied = true;
-            if (!gp.player.isBlocking() && !gp.player.isDodging()) {
-                gp.player.takeDamage(10);
+            if (!gp.player.isDodging()) {
+                gp.player.takeDamage(10, worldX + gp.tileSize / 2, worldY + gp.tileSize / 2);
             }
         }
         if (attackCounter >= 20) {
@@ -312,10 +317,37 @@ public class Monster {
     }
 
     public void takeDamage(int damage) {
+        takeDamage(damage, null);
+    }
+
+    public void takeDamage(int damage, Direction fromDir) {
         if (dying || dead) {
             return;
         }
         health = Math.max(0, health - damage);
+        hurtFlashCounter = HURT_FLASH_FRAMES;
+
+        // Hitstun: interrupts monster attack so player is never hit while attacking!
+        attacking = false;
+        attackDamageApplied = true;
+        attackCounter = 0;
+        attackCooldown = 35; // Recovery frames
+
+        // Knockback away from attacker
+        if (fromDir != null) {
+            int kb = gp.tileSize / 3;
+            switch (fromDir) {
+                case UP    -> worldY = Math.max(0, worldY - kb);
+                case DOWN  -> worldY = Math.min(gp.worldHeight - gp.tileSize, worldY + kb);
+                case LEFT  -> worldX = Math.max(0, worldX - kb);
+                case RIGHT -> worldX = Math.min(gp.worldWidth - gp.tileSize, worldX + kb);
+            }
+        }
+
+        int screenX = worldX - gp.player.worldX + gp.player.screenX + gp.tileSize / 2;
+        int screenY = worldY - gp.player.worldY + gp.player.screenY - 10;
+        DamagePopup.spawn(screenX, screenY, damage, false);
+
         if (health == 0) {
             if (gp.levelM != null) {
                 String rewardClass = gp.levelM.currentLevel == 1 ? "undead"
@@ -361,6 +393,11 @@ public class Monster {
         if (dead) {
             return;
         }
+        // Advance hurt flash counter
+        if (hurtFlashCounter > 0) {
+            hurtFlashCounter--;
+        }
+
         int directionIndex = getDirectionIndex();
         int row = dying ? DEATH_ROW : attacking ? ATTACK_ROW : moving ? WALK_ROW : IDLE_ROW;
         BufferedImage image = frames[row][directionIndex][animationFrame];
@@ -373,21 +410,53 @@ public class Monster {
         Object oldInterpolation = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
         g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                 RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        g2.drawImage(image, drawX, drawY, size, size, null);
+
+        // Hurt flash: draw semi-transparent red overlay every other frame
+        if (hurtFlashCounter > 0 && (hurtFlashCounter % 2 == 0)) {
+            // Draw tinted version: draw image, then red overlay
+            g2.drawImage(image, drawX, drawY, size, size, null);
+            java.awt.Composite old2 = g2.getComposite();
+            g2.setComposite(java.awt.AlphaComposite.getInstance(
+                    java.awt.AlphaComposite.SRC_OVER, 0.55f));
+            g2.setColor(new Color(255, 60, 60));
+            g2.fillRect(drawX, drawY, size, size);
+            g2.setComposite(old2);
+        } else {
+            g2.drawImage(image, drawX, drawY, size, size, null);
+        }
+
         if (oldInterpolation != null) {
             g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
         }
 
-        int barWidth = gp.tileSize;
-        int barHeight = 6;
-        int barX = screenX + (gp.tileSize - barWidth) / 2;
-        int barY = drawY - 8;
-        g2.setColor(Color.DARK_GRAY);
-        g2.fillRect(barX, barY, barWidth, barHeight);
-        g2.setColor(Color.RED);
-        g2.fillRect(barX, barY, barWidth * health / maxHealth, barHeight);
-        g2.setColor(Color.BLACK);
-        g2.drawRect(barX, barY, barWidth, barHeight);
+        // ── Health bar ───────────────────────────────────────────────────────
+        if (!dying) {
+            int barWidth  = gp.tileSize + 10;
+            int barHeight = 7;
+            int barX = screenX + (gp.tileSize - barWidth) / 2;
+            int barY = drawY - 12;
+            float ratio = (float) health / maxHealth;
+
+            // Background
+            g2.setColor(new Color(30, 30, 30, 200));
+            g2.fillRoundRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, 4, 4);
+
+            // Fill: green → yellow → red based on HP ratio
+            Color fillColor;
+            if (ratio > 0.6f) {
+                fillColor = new Color(50, 200, 50);
+            } else if (ratio > 0.3f) {
+                fillColor = new Color(230, 200, 20);
+            } else {
+                fillColor = new Color(210, 40, 40);
+            }
+            g2.setColor(fillColor);
+            g2.fillRoundRect(barX, barY, (int)(barWidth * ratio), barHeight, 3, 3);
+
+            // Border
+            g2.setColor(new Color(10, 10, 10, 220));
+            g2.drawRoundRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2, 4, 4);
+        }
     }
 
     private int getDirectionIndex() {

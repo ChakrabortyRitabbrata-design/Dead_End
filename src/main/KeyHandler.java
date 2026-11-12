@@ -25,6 +25,10 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     public boolean dodgePressed;
     public boolean runPressed;
     public boolean rollPressed;
+    public boolean inventoryTogglePressed;
+    public boolean inventoryClosePressed;
+    public int hotbarKeyPressed = -1;
+    public boolean attackPressed;
 
     private boolean punchRequested;
     private boolean kickRequested;
@@ -76,7 +80,9 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             }
             case KeyEvent.VK_J -> requestPunch();
             case KeyEvent.VK_E, KeyEvent.VK_K -> requestKick();
-            case KeyEvent.VK_Q, KeyEvent.VK_SPACE -> requestDodge();
+            case KeyEvent.VK_Q -> requestDodge();
+            case KeyEvent.VK_SPACE -> attackPressed = true;
+            case KeyEvent.VK_R -> blockPressed = true;
             case KeyEvent.VK_CONTROL -> requestRoll();
             case KeyEvent.VK_SHIFT -> runPressed = true;
             case KeyEvent.VK_F -> {
@@ -115,6 +121,11 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             default -> {
             }
         }
+        if (code == KeyEvent.VK_TAB) inventoryTogglePressed = true;
+        if (code == KeyEvent.VK_ESCAPE) inventoryClosePressed = true;
+        if (code >= KeyEvent.VK_1 && code <= KeyEvent.VK_9) {
+            hotbarKeyPressed = code - KeyEvent.VK_0;
+        }
     }
 
     @Override
@@ -128,9 +139,14 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             case KeyEvent.VK_D -> rightPressed = false;
             case KeyEvent.VK_J -> punchPressed = false;
             case KeyEvent.VK_E, KeyEvent.VK_K -> kickPressed = false;
-            case KeyEvent.VK_Q, KeyEvent.VK_SPACE -> dodgePressed = false;
+            case KeyEvent.VK_Q -> dodgePressed = false;
             case KeyEvent.VK_CONTROL -> rollPressed = false;
             case KeyEvent.VK_SHIFT -> runPressed = false;
+            case KeyEvent.VK_SPACE -> {
+                dodgePressed = false;
+                attackPressed = false;
+            }
+            case KeyEvent.VK_R -> blockPressed = false;
             case KeyEvent.VK_F -> interactHeld = false;
             case KeyEvent.VK_M -> mapKeyHeld = false;
             case KeyEvent.VK_ESCAPE -> escapeKeyHeld = false;
@@ -284,6 +300,10 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         dodgePressed = false;
         runPressed = false;
         rollPressed = false;
+        inventoryTogglePressed = false;
+        inventoryClosePressed = false;
+        hotbarKeyPressed = -1;
+        attackPressed = false;
         punchRequested = false;
         kickRequested = false;
         dodgeRequested = false;

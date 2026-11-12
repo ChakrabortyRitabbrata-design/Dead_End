@@ -15,6 +15,10 @@ import javax.swing.JPanel;
 import entities.Dragon;
 import entities.Monster;
 import entities.Player;
+import inventory.EquipmentManager;
+import inventory.Hotbar;
+import inventory.Inventory;
+import inventory.InventoryUI;
 import tile.MapData;
 import tile.TileManager;
 import Object.SuperObject;
@@ -47,7 +51,7 @@ public class GamePanel extends JPanel implements Runnable {
     // Game state
     // =========================================================================
 
-    public enum GameState { PLAYING, LEVEL_TRANSITION, FULL_MAP, GAME_OVER, GAME_COMPLETE }
+    public enum GameState { PLAYING, LEVEL_TRANSITION, FULL_MAP, INVENTORY, GAME_OVER, GAME_COMPLETE }
     public GameState gameState = GameState.PLAYING;
 
     public int score = 0;
@@ -58,6 +62,10 @@ public class GamePanel extends JPanel implements Runnable {
 
     public TileManager    tileM   = new TileManager(this);
     public KeyHandler     keyH    = new KeyHandler();
+    public Inventory      inventory = new Inventory();
+    public Hotbar         hotbar = new Hotbar(inventory);
+    public EquipmentManager equipmentManager = new EquipmentManager();
+    public InventoryUI    inventoryUI;
     public CollisionChecker cChecker = new CollisionChecker(this);
     public Player         player  = new Player(this, keyH);
     public AssetSetter    aSetter = new AssetSetter(this);
@@ -105,10 +113,12 @@ public class GamePanel extends JPanel implements Runnable {
         this.setBackground(Color.BLACK);
         this.setDoubleBuffered(true);
         this.setFocusable(true);
+        this.setFocusTraversalKeysEnabled(false);
 
         this.addKeyListener(keyH);
         this.addFocusListener(keyH);
         this.addMouseListener(keyH);
+        inventoryUI = new InventoryUI(inventory, hotbar, equipmentManager, this);
 
         // Initialise fog with current dimensions (updated after each loadLevel)
         fogOfWar = new FogOfWar(maxWorldCol, maxWorldRow);
@@ -213,6 +223,27 @@ public class GamePanel extends JPanel implements Runnable {
 
     /** Delta-time update used by the animation controller. */
     public void update(long deltaNanos) {
+        if (keyH.inventoryTogglePressed) {
+            keyH.inventoryTogglePressed = false;
+            if (gameState == GameState.PLAYING) {
+                gameState = GameState.INVENTORY;
+                inventoryUI.show();
+            } else if (gameState == GameState.INVENTORY) {
+                gameState = GameState.PLAYING;
+                inventoryUI.hide();
+            }
+        }
+        if (keyH.inventoryClosePressed) {
+            keyH.inventoryClosePressed = false;
+            if (inventoryUI.isVisible()) {
+                inventoryUI.hide();
+                gameState = GameState.PLAYING;
+            }
+        }
+        if (keyH.hotbarKeyPressed > 0) {
+            hotbar.selectByKeyNumber(keyH.hotbarKeyPressed);
+            keyH.hotbarKeyPressed = -1;
+        }
         if (keyH.consumeFit()) minimap.resetFullMapView();
         boolean save=keyH.consumeSave(), load=keyH.consumeLoad();
         if (gameState != GameState.LEVEL_TRANSITION && (save || load)) {
@@ -300,6 +331,10 @@ public class GamePanel extends JPanel implements Runnable {
 
         drawPlayerHealthBar(g2);
         drawScoreHUD(g2);
+        inventoryUI.drawHotbar(g2, screenWidth, screenHeight);
+        if (inventoryUI.isVisible()) {
+            inventoryUI.draw(g2, screenWidth, screenHeight);
+        }
 
         // --- Full-screen map overlay ---
         if (gameState == GameState.FULL_MAP) {

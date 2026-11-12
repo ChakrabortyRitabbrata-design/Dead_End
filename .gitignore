@@ -5,3 +5,6 @@ out/
 *.class
 .DS_Store
 saves/
+.metadata/
+.settings/
+Dead_End/
