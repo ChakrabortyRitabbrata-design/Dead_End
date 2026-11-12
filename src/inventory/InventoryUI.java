@@ -725,9 +725,9 @@ public class InventoryUI {
         int barW = Inventory.COLS * CELL - PADDING + PADDING * 2;
         int barH = SLOT_SIZE + PADDING * 2;
         int barX = (screenW - barW) / 2;
-        int barY = screenH - barH - 8;
+        int barY = screenH - barH - 20;
 
-        g2.setColor(new Color(26, 26, 32, 210));
+        g2.setColor(new Color(26, 26, 32, 245));
         g2.fillRoundRect(barX, barY, barW, barH, 10, 10);
         g2.setColor(BORDER);
         g2.setStroke(new BasicStroke(1.5f));

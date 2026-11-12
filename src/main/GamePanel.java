@@ -16,9 +16,12 @@ import entities.Dragon;
 import entities.Monster;
 import entities.Player;
 import inventory.EquipmentManager;
+import inventory.EquipmentSlot;
 import inventory.Hotbar;
 import inventory.Inventory;
 import inventory.InventoryUI;
+import inventory.Item;
+import inventory.Weapon;
 import tile.MapData;
 import tile.TileManager;
 import Object.SuperObject;
@@ -242,7 +245,14 @@ public class GamePanel extends JPanel implements Runnable {
         }
         if (keyH.hotbarKeyPressed > 0) {
             hotbar.selectByKeyNumber(keyH.hotbarKeyPressed);
+            equipSelectedHotbarWeapon();
             keyH.hotbarKeyPressed = -1;
+        }
+        if (gameState == GameState.GAME_OVER) {
+            if (keyH.consumeRespawn()) {
+                respawnPlayer();
+            }
+            return;
         }
         if (keyH.consumeFit()) minimap.resetFullMapView();
         boolean save=keyH.consumeSave(), load=keyH.consumeLoad();
@@ -274,7 +284,10 @@ public class GamePanel extends JPanel implements Runnable {
 
         if (player.isDead()) {
             keyH.clearAllInputs();
-            if (player.isDeathAnimationFinished()) gameState = GameState.GAME_OVER;
+            if (player.isDeathAnimationFinished()) {
+                gameState = GameState.GAME_OVER;
+                keyH.clearAllInputs();
+            }
             return;
         }
 
@@ -355,6 +368,12 @@ public class GamePanel extends JPanel implements Runnable {
         // --- Game over screen ---
         if (gameState == GameState.GAME_OVER) {
             drawEndScreen(g2, "DEAD END", new Color(180, 0, 0));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+            g2.setColor(Color.WHITE);
+            String prompt = "Press R to respawn at the starting position";
+            var promptMetrics = g2.getFontMetrics();
+            g2.drawString(prompt, (screenWidth - promptMetrics.stringWidth(prompt)) / 2,
+                    screenHeight / 2 + 78);
         }
 
         g2.dispose();
@@ -550,6 +569,30 @@ public class GamePanel extends JPanel implements Runnable {
             player.worldX = spawn[0] * tileSize;
             player.worldY = spawn[1] * tileSize;
         }
+    }
+
+    private void equipSelectedHotbarWeapon() {
+        Item selected = hotbar.getSelectedItem();
+        if (!(selected instanceof Weapon weapon)) {
+            return;
+        }
+        Item previous = equipmentManager.equip(EquipmentSlot.MAIN_HAND, weapon);
+        if (previous != null && previous != selected) {
+            inventory.setSlot(hotbar.getSelectedSlot() + Inventory.HOTBAR_OFFSET, previous);
+        } else {
+            inventory.setSlot(hotbar.getSelectedSlot() + Inventory.HOTBAR_OFFSET, null);
+        }
+    }
+
+    private void respawnPlayer() {
+        applyPlayerSpawn();
+        player.restoreHealth(player.getMaxHealth());
+        player.resetActionState();
+        monsters.clear();
+        spawnMonstersForLevel();
+        keyH.clearAllInputs();
+        gameState = GameState.PLAYING;
+        updateCamera();
     }
     public void updateCamera() {
         int cameraX=Math.max(0,Math.min(worldWidth-screenWidth,player.worldX-screenWidth/2+tileSize/2));

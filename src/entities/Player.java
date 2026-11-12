@@ -69,6 +69,10 @@ public class Player extends Entity {
     private Direction facing = Direction.UP;
     private Direction actionDirection = Direction.UP;
     private int health = 100;
+    private long timeSinceDamageNanos;
+    private long regenerationNanos;
+    private static final long REGEN_DELAY_NANOS = 2_000_000_000L;
+    private static final int REGENERATION_PER_SECOND = 6;
     private long attackCooldownNanos;
     private long dodgeCooldownNanos;
     private long damageInvulnerabilityNanos;
@@ -381,6 +385,21 @@ public class Player extends Entity {
         dodgeCooldownNanos = Math.max(0, dodgeCooldownNanos - delta);
         damageInvulnerabilityNanos = Math.max(0, damageInvulnerabilityNanos - delta);
         hurtRemainingNanos = Math.max(0, hurtRemainingNanos - delta);
+        if (health > 0 && health < getMaxHealth()) {
+            timeSinceDamageNanos = Math.min(REGEN_DELAY_NANOS, timeSinceDamageNanos + delta);
+            if (timeSinceDamageNanos >= REGEN_DELAY_NANOS) {
+                regenerationNanos += delta;
+                long healthToRestore =
+                        regenerationNanos * REGENERATION_PER_SECOND / 1_000_000_000L;
+                if (healthToRestore > 0) {
+                    health = Math.min(getMaxHealth(), health + (int) healthToRestore);
+                    regenerationNanos %= 1_000_000_000L;
+                }
+            }
+        } else if (health >= getMaxHealth()) {
+            timeSinceDamageNanos = 0;
+            regenerationNanos = 0;
+        }
         blockCooldownNanos = Math.max(0, blockCooldownNanos - delta);
         if (blockEffectTimer > 0) blockEffectTimer--;
 
@@ -693,6 +712,8 @@ public class Player extends Entity {
 
     public void restoreHealth(int amount) {
         health = Math.max(0, Math.min(getMaxHealth(), amount));
+        timeSinceDamageNanos = 0;
+        regenerationNanos = 0;
     }
 
     public void resetActionState() {
@@ -700,6 +721,8 @@ public class Player extends Entity {
         dodgeCooldownNanos = 0;
         damageInvulnerabilityNanos = 0;
         hurtRemainingNanos = 0;
+        timeSinceDamageNanos = 0;
+        regenerationNanos = 0;
         dodgeDistanceRemaining = 0;
         rollDistanceRemaining = 0;
         attackHitApplied = false;
@@ -737,6 +760,8 @@ public class Player extends Entity {
         int effectiveDamage = Math.max(1, damage - defense / 2);
         damageInvulnerabilityNanos = DAMAGE_INVULNERABILITY_NANOS;
         hurtRemainingNanos = HURT_LOCK_NANOS;
+        timeSinceDamageNanos = 0;
+        regenerationNanos = 0;
         health = Math.max(0, health - effectiveDamage);
 
         // Spawn a red damage popup at player screen center

@@ -29,6 +29,7 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     public boolean inventoryClosePressed;
     public int hotbarKeyPressed = -1;
     public boolean attackPressed;
+    private boolean respawnRequested;
 
     private boolean punchRequested;
     private boolean kickRequested;
@@ -82,7 +83,10 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             case KeyEvent.VK_E, KeyEvent.VK_K -> requestKick();
             case KeyEvent.VK_Q -> requestDodge();
             case KeyEvent.VK_SPACE -> attackPressed = true;
-            case KeyEvent.VK_R -> blockPressed = true;
+            case KeyEvent.VK_R -> {
+                respawnRequested = true;
+                blockPressed = true;
+            }
             case KeyEvent.VK_CONTROL -> requestRoll();
             case KeyEvent.VK_SHIFT -> runPressed = true;
             case KeyEvent.VK_F -> {
@@ -243,6 +247,16 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         return requested;
     }
 
+    public synchronized void requestRespawn() {
+        respawnRequested = true;
+    }
+
+    public synchronized boolean consumeRespawn() {
+        boolean requested = respawnRequested;
+        respawnRequested = false;
+        return requested;
+    }
+
     /** The most recently pressed held direction wins, matching animation facing. */
     public synchronized String getMovementDirection() {
         long latest = Math.max(Math.max(upPressed ? upOrder : 0, downPressed ? downOrder : 0),
@@ -304,6 +318,7 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         inventoryClosePressed = false;
         hotbarKeyPressed = -1;
         attackPressed = false;
+        respawnRequested = false;
         punchRequested = false;
         kickRequested = false;
         dodgeRequested = false;
