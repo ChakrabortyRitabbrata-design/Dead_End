@@ -373,6 +373,10 @@ public class Player extends Entity {
         return facing;
     }
 
+    public boolean isSwimming() {
+        return false;
+    }
+
     // â”€â”€ Update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public void update() {
@@ -544,10 +548,11 @@ public class Player extends Entity {
     private void updateMovement(long delta) {
         Direction input = inputDirection();
         boolean moving = hasMovementInput();
+        boolean swimming = isSwimming();
         if (moving) {
             facing = input;
             direction = directionName(facing);
-            speed = keyH.runPressed ? 6 : 4;
+            speed = swimming ? (keyH.runPressed ? 4 : 3) : (keyH.runPressed ? 6 : 4);
             moveWithCollision(speed);
             setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
         } else {
@@ -779,6 +784,15 @@ public class Player extends Entity {
     // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     public void draw(Graphics2D g2) {
+        if (isSwimming()) {
+            int rippleX = screenX + gp.tileSize / 2;
+            int rippleY = screenY + gp.tileSize - 3;
+            int rippleSize = gp.tileSize / 2 + (combatFrameIndex % 3) * 3;
+            g2.setColor(new Color(106, 226, 245, 70));
+            g2.fillOval(rippleX - rippleSize / 2, rippleY - 5, rippleSize, 10);
+            g2.setColor(new Color(164, 246, 255, 155));
+            g2.drawOval(rippleX - rippleSize / 2, rippleY - 5, rippleSize, 10);
+        }
         BufferedImage image = animationController.getCurrentFrame().getImage();
         int drawSize = gp.tileSize * 2;
         int drawX = screenX + (gp.tileSize - drawSize) / 2;

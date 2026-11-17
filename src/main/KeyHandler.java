@@ -45,6 +45,7 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     private boolean mapKeyHeld;
     private boolean escapeKeyHeld;
 
+    private final Set<Integer> movementKeysHeld = new HashSet<>();
     private long inputOrder;
     private long upOrder;
     private long downOrder;
@@ -63,22 +64,10 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     public synchronized void keyPressed(KeyEvent e) {
         int code = e.getKeyCode();
         switch (code) {
-            case KeyEvent.VK_W -> {
-                upPressed = true;
-                upOrder = ++inputOrder;
-            }
-            case KeyEvent.VK_S -> {
-                downPressed = true;
-                downOrder = ++inputOrder;
-            }
-            case KeyEvent.VK_A -> {
-                leftPressed = true;
-                leftOrder = ++inputOrder;
-            }
-            case KeyEvent.VK_D -> {
-                rightPressed = true;
-                rightOrder = ++inputOrder;
-            }
+            case KeyEvent.VK_W, KeyEvent.VK_UP -> pressMovementKey(code);
+            case KeyEvent.VK_S, KeyEvent.VK_DOWN -> pressMovementKey(code);
+            case KeyEvent.VK_A, KeyEvent.VK_LEFT -> pressMovementKey(code);
+            case KeyEvent.VK_D, KeyEvent.VK_RIGHT -> pressMovementKey(code);
             case KeyEvent.VK_J -> requestPunch();
             case KeyEvent.VK_E, KeyEvent.VK_K -> requestKick();
             case KeyEvent.VK_Q -> requestDodge();
@@ -137,10 +126,10 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         int code = e.getKeyCode();
         commandHeld.remove(code);
         switch (code) {
-            case KeyEvent.VK_W -> upPressed = false;
-            case KeyEvent.VK_S -> downPressed = false;
-            case KeyEvent.VK_A -> leftPressed = false;
-            case KeyEvent.VK_D -> rightPressed = false;
+            case KeyEvent.VK_W, KeyEvent.VK_UP -> releaseMovementKey(code);
+            case KeyEvent.VK_S, KeyEvent.VK_DOWN -> releaseMovementKey(code);
+            case KeyEvent.VK_A, KeyEvent.VK_LEFT -> releaseMovementKey(code);
+            case KeyEvent.VK_D, KeyEvent.VK_RIGHT -> releaseMovementKey(code);
             case KeyEvent.VK_J -> punchPressed = false;
             case KeyEvent.VK_E, KeyEvent.VK_K -> kickPressed = false;
             case KeyEvent.VK_Q -> dodgePressed = false;
@@ -164,6 +153,51 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
             punchRequested = true;
         }
         punchPressed = true;
+    }
+
+    private void pressMovementKey(int code) {
+        if (!movementKeysHeld.add(code)) {
+            return;
+        }
+        long order = ++inputOrder;
+        switch (code) {
+            case KeyEvent.VK_W, KeyEvent.VK_UP -> {
+                upPressed = true;
+                upOrder = order;
+            }
+            case KeyEvent.VK_S, KeyEvent.VK_DOWN -> {
+                downPressed = true;
+                downOrder = order;
+            }
+            case KeyEvent.VK_A, KeyEvent.VK_LEFT -> {
+                leftPressed = true;
+                leftOrder = order;
+            }
+            case KeyEvent.VK_D, KeyEvent.VK_RIGHT -> {
+                rightPressed = true;
+                rightOrder = order;
+            }
+            default -> throw new IllegalArgumentException("Not a movement key: " + code);
+        }
+    }
+
+    private void releaseMovementKey(int code) {
+        movementKeysHeld.remove(code);
+        switch (code) {
+            case KeyEvent.VK_W, KeyEvent.VK_UP ->
+                    upPressed = isAnyMovementKeyHeld(KeyEvent.VK_W, KeyEvent.VK_UP);
+            case KeyEvent.VK_S, KeyEvent.VK_DOWN ->
+                    downPressed = isAnyMovementKeyHeld(KeyEvent.VK_S, KeyEvent.VK_DOWN);
+            case KeyEvent.VK_A, KeyEvent.VK_LEFT ->
+                    leftPressed = isAnyMovementKeyHeld(KeyEvent.VK_A, KeyEvent.VK_LEFT);
+            case KeyEvent.VK_D, KeyEvent.VK_RIGHT ->
+                    rightPressed = isAnyMovementKeyHeld(KeyEvent.VK_D, KeyEvent.VK_RIGHT);
+            default -> throw new IllegalArgumentException("Not a movement key: " + code);
+        }
+    }
+
+    private boolean isAnyMovementKeyHeld(int firstKey, int secondKey) {
+        return movementKeysHeld.contains(firstKey) || movementKeysHeld.contains(secondKey);
     }
 
     private void requestKick() {
@@ -308,6 +342,7 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         downPressed = false;
         leftPressed = false;
         rightPressed = false;
+        movementKeysHeld.clear();
         punchPressed = false;
         kickPressed = false;
         blockPressed = false;

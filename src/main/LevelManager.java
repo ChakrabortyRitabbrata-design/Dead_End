@@ -12,7 +12,7 @@ public class LevelManager {
     public int currentLevel=1, fadeAlpha;
     public Progression progression=new Progression();
     private final Map<Integer,RegionState> regions=new HashMap<>();
-    private record RegionState(FogOfWar fog,List<Monster> monsters,Dragon dragon) {}
+    private record RegionState(FogOfWar fog,List<Monster> monsters,Dragon dragon,Dragon dragon2) {}
     private int ticks, target, arrivalCol, arrivalRow;
     private boolean transitioning;
     private String message="Explore Willow Rest • M: world map";
@@ -35,9 +35,19 @@ public class LevelManager {
     }
     public void onDragonDefeated() {
         if(currentLevel!=3) return;
-        progression.award("3-dragon","dragon");
         if(gp.dragon!=null) gp.dragon.isDead=true;
+        if(gp.dragon2!=null) gp.dragon2.isDead=true;
+        progression.award("3-dragon","dragon");
         gp.gameState=GamePanel.GameState.GAME_COMPLETE;
+    }
+    public void onDragonDefeated(Dragon defeated) {
+        if(currentLevel!=3) return;
+        defeated.isDead=true;
+        if((gp.dragon==null||gp.dragon.isDead)
+                &&(gp.dragon2==null||gp.dragon2.isDead)) {
+            progression.award("3-dragon","dragon");
+            gp.gameState=GamePanel.GameState.GAME_COMPLETE;
+        }
     }
     public void beginTransition(int destination) {
         if(transitioning||destination<1||destination>3||Math.abs(destination-currentLevel)!=1) return;
@@ -57,7 +67,7 @@ public class LevelManager {
         } else fadeAlpha=Math.max(0,255-(ticks-31)*255/30);
         if(ticks>=61) {transitioning=false;fadeAlpha=0;gp.gameState=GamePanel.GameState.PLAYING;}
     }
-    private void snapshot() {regions.put(currentLevel,new RegionState(gp.fogOfWar,new ArrayList<>(gp.monsters),gp.dragon));}
+    private void snapshot() {regions.put(currentLevel,new RegionState(gp.fogOfWar,new ArrayList<>(gp.monsters),gp.dragon,gp.dragon2));}
     public void enter(int id,int col,int row) throws IOException {
         MapLoader.loadLevel(id);
         snapshot();gp.fogOfWar=new FogOfWar(1,1);
@@ -66,14 +76,16 @@ public class LevelManager {
         gp.player.resetActionState();
         gp.aSetter.setObject();RegionState saved=regions.get(id);
         if(saved!=null) {
-            gp.fogOfWar=saved.fog;gp.monsters.clear();gp.monsters.addAll(saved.monsters);gp.dragon=saved.dragon;
+            gp.fogOfWar=saved.fog;gp.monsters.clear();gp.monsters.addAll(saved.monsters);gp.dragon=saved.dragon;gp.dragon2=saved.dragon2;
         } else {
-            gp.spawnMonstersForLevel();gp.dragon=null;
-            if(gp.tileM.currentMap.dragonSpawn!=null) {
+            gp.spawnMonstersForLevel();gp.dragon=null;gp.dragon2=null;
+            if(id==3&&gp.tileM.currentMap.dragonSpawn!=null) {
                 gp.dragon=new Dragon(gp);int[] d=gp.tileM.currentMap.dragonSpawn;gp.dragon.activate(d[0],d[1]);
+                gp.dragon2=new Dragon(gp);gp.dragon2.activate(d[0],d[1],gp.dragon.getWaterRegionId());
             }
         }
-        gp.dragonActive=gp.dragon!=null&&!gp.dragon.isDead;
+        gp.dragonActive=id==3&&((gp.dragon!=null&&!gp.dragon.isDead)
+                ||(gp.dragon2!=null&&!gp.dragon2.isDead));
         gp.fogOfWar.update(col,row);notifyPlayer(gp.tileM.currentMap.levelName);
     }
     public FogOfWar fog(int region) {return region==currentLevel?gp.fogOfWar:regions.containsKey(region)?regions.get(region).fog:null;}
@@ -88,6 +100,24 @@ public class LevelManager {
             p.setProperty(prefix+"fog",s.fog.encode());List<String> enemies=new ArrayList<>();
             for(Monster m:s.monsters) if(m.health>0) enemies.add(m.persistentId+":"+m.worldX+":"+m.worldY+":"+m.health);
             p.setProperty(prefix+"enemies",String.join(";",enemies));
+            if(s.dragon!=null) {
+                p.setProperty(prefix+"dragonDead",Boolean.toString(s.dragon.isDead));
+                if(!s.dragon.isDead) {
+                    p.setProperty(prefix+"dragonHealth",Integer.toString(s.dragon.health));
+                    p.setProperty(prefix+"dragonX",Integer.toString(s.dragon.worldX));
+                    p.setProperty(prefix+"dragonY",Integer.toString(s.dragon.worldY));
+                    p.setProperty(prefix+"dragonWaterRegion",Integer.toString(s.dragon.getWaterRegionId()));
+                }
+            }
+            if(s.dragon2!=null) {
+                p.setProperty(prefix+"dragon2Dead",Boolean.toString(s.dragon2.isDead));
+                if(!s.dragon2.isDead) {
+                    p.setProperty(prefix+"dragon2Health",Integer.toString(s.dragon2.health));
+                    p.setProperty(prefix+"dragon2X",Integer.toString(s.dragon2.worldX));
+                    p.setProperty(prefix+"dragon2Y",Integer.toString(s.dragon2.worldY));
+                    p.setProperty(prefix+"dragon2WaterRegion",Integer.toString(s.dragon2.getWaterRegionId()));
+                }
+            }
         }
         Path absolute=path.toAbsolutePath();Files.createDirectories(absolute.getParent());
         Path temp=Files.createTempFile(absolute.getParent(),"dead-end-",".tmp");
@@ -120,16 +150,60 @@ public class LevelManager {
                     if(next.rewarded(a[0])) continue;
                     Monster enemy=new Monster(gp,mx,my);enemy.persistentId=a[0];enemy.health=hp;enemies.add(enemy);
                 }
-                Dragon dragon=null;
-                if(m.dragonSpawn!=null&&!next.rewarded("3-dragon")) {dragon=new Dragon(gp);dragon.activate(m.dragonSpawn[0],m.dragonSpawn[1]);}
-                restored.put(i,new RegionState(fog,enemies,dragon));
+                Dragon dragon=null,dragon2=null;
+                if(i==3&&m.dragonSpawn!=null&&!next.rewarded("3-dragon")) {
+                    dragon=new Dragon(gp,m);dragon.activate(m.dragonSpawn[0],m.dragonSpawn[1]);
+                    dragon2=new Dragon(gp,m);
+                    dragon2.activate(m.dragonSpawn[0],m.dragonSpawn[1],dragon.getWaterRegionId());
+                    if(Boolean.parseBoolean(p.getProperty(prefix+"dragonDead","false"))) {
+                        dragon.restoreDefeated();
+                    } else if(p.containsKey(prefix+"dragonHealth")) {
+                        int bossHealth=Integer.parseInt(p.getProperty(prefix+"dragonHealth"));
+                        int bossX=Integer.parseInt(p.getProperty(prefix+"dragonX"));
+                        int bossY=Integer.parseInt(p.getProperty(prefix+"dragonY"));
+                        if(bossHealth<0||bossHealth>300) throw new IllegalArgumentException("Invalid dragon health");
+                        if(p.containsKey(prefix+"dragonWaterRegion")
+                                &&!dragon.restoreWaterRegion(Integer.parseInt(
+                                        p.getProperty(prefix+"dragonWaterRegion"))))
+                            throw new IllegalArgumentException("Invalid dragon water region");
+                        dragon.health=bossHealth;
+                        if(bossX<0||bossY<0||bossX>=m.mapWidth*48||bossY>=m.mapHeight*48)
+                            throw new IllegalArgumentException("Invalid dragon position");
+                        dragon.worldX=bossX;dragon.worldY=bossY;
+                        if(!dragon.isOnValidTerrain()) throw new IllegalArgumentException("Dragon is outside traversable terrain");
+                    }
+                    if(Boolean.parseBoolean(p.getProperty(prefix+"dragon2Dead","false"))) {
+                        dragon2.restoreDefeated();
+                    } else if(p.containsKey(prefix+"dragon2Health")) {
+                        int bossHealth=Integer.parseInt(p.getProperty(prefix+"dragon2Health"));
+                        int bossX=Integer.parseInt(p.getProperty(prefix+"dragon2X"));
+                        int bossY=Integer.parseInt(p.getProperty(prefix+"dragon2Y"));
+                        if(bossHealth<0||bossHealth>300) throw new IllegalArgumentException("Invalid second dragon health");
+                        if(p.containsKey(prefix+"dragon2WaterRegion")
+                                &&!dragon2.restoreWaterRegion(Integer.parseInt(
+                                        p.getProperty(prefix+"dragon2WaterRegion"))))
+                            throw new IllegalArgumentException("Invalid second dragon water region");
+                        dragon2.health=bossHealth;
+                        if(bossX<0||bossY<0||bossX>=m.mapWidth*48||bossY>=m.mapHeight*48)
+                            throw new IllegalArgumentException("Invalid second dragon position");
+                        dragon2.worldX=bossX;dragon2.worldY=bossY;
+                        if(!dragon2.isOnValidTerrain()) throw new IllegalArgumentException("Second dragon is outside traversable terrain");
+                    }
+                }
+                restored.put(i,new RegionState(fog,enemies,dragon,dragon2));
             }
             MapData m=MapLoader.loadLevel(id);
-            if(!restored.containsKey(id)||x<0||y<0||x>=m.mapWidth*48||y>=m.mapHeight*48||m.collisionLayer[x/48][y/48]!=0)
+            boolean inBounds=x>=0&&y>=0&&x<m.mapWidth*48&&y<m.mapHeight*48;
+            boolean waterPosition=inBounds&&id==3
+                    &&(m.groundLayer[x/48][y/48]==2||m.groundLayer[x/48][y/48]==18);
+            if(!restored.containsKey(id)||!inBounds
+                    ||(m.collisionLayer[x/48][y/48]!=0&&!waterPosition))
                 throw new IllegalArgumentException("Invalid saved position");
             gp.fogOfWar=new FogOfWar(1,1);gp.tileM.loadLevel(id);currentLevel=id;progression=next;
             regions.clear();regions.putAll(restored);RegionState s=regions.get(id);
-            gp.fogOfWar=s.fog;gp.monsters.clear();gp.monsters.addAll(s.monsters);gp.dragon=s.dragon;gp.dragonActive=s.dragon!=null;
+            gp.fogOfWar=s.fog;gp.monsters.clear();gp.monsters.addAll(s.monsters);gp.dragon=s.dragon;gp.dragon2=s.dragon2;
+            gp.dragonActive=id==3&&((s.dragon!=null&&!s.dragon.isDead)
+                    ||(s.dragon2!=null&&!s.dragon2.isDead));
             gp.player.worldX=x;gp.player.worldY=y;gp.player.restoreHealth(health);gp.aSetter.setObject();
             gp.keyH.clearAllInputs();gp.player.resetActionState();
             gp.fogOfWar.update(x/48,y/48);fadeAlpha=0;transitioning=false;

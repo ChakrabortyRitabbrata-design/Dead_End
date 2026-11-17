@@ -90,6 +90,7 @@ public class GamePanel extends JPanel implements Runnable {
     // =========================================================================
 
     public Dragon   dragon       = null;
+    public Dragon   dragon2      = null;
     public boolean  dragonActive = false;
 
     public final List<Monster> monsters = new ArrayList<>();
@@ -141,7 +142,7 @@ public class GamePanel extends JPanel implements Runnable {
         // Apply player spawn from Level 1 map data
         applyPlayerSpawn();
 
-        // Activate dragon if Level 1 meta contains BOSS_DRAGON (currently disabled)
+        // The water dragon is reserved for its authored third-region arena.
         activateDragonFromMap();
     }
 
@@ -291,7 +292,15 @@ public class GamePanel extends JPanel implements Runnable {
             return;
         }
 
-        if (dragonActive && dragon != null) dragon.update();
+        if (levelM.currentLevel == 3) {
+            DamagePopup.updateAll(deltaNanos);
+        }
+        if (levelM.currentLevel == 3 && dragonActive && dragon != null) {
+            dragon.update(deltaNanos);
+        }
+        if (levelM.currentLevel == 3 && dragonActive && dragon2 != null) {
+            dragon2.update(deltaNanos);
+        }
 
         Iterator<Monster> it = monsters.iterator();
         while (it.hasNext()) {
@@ -328,9 +337,13 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         // --- Entities ---
-        if (dragonActive && dragon != null) dragon.draw(g2);
+        if (levelM.currentLevel == 3 && dragonActive && dragon != null) dragon.draw(g2);
+        if (levelM.currentLevel == 3 && dragonActive && dragon2 != null) dragon2.draw(g2);
         for (Monster m : monsters) m.draw(g2);
         player.draw(g2);
+        if (levelM.currentLevel == 3) {
+            DamagePopup.drawAll(g2);
+        }
         if (tileM.currentMap.authoredWorld) worldRenderer.drawObjects(g2, true);
         if (tileM.currentMap.authoredWorld) worldRenderer.drawHud(g2);
 
@@ -601,10 +614,13 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void activateDragonFromMap() {
-        if (tileM.currentMap != null && tileM.currentMap.dragonSpawn != null) {
+        if (tileM.currentMap != null && tileM.currentMap.levelId == 3
+                && tileM.currentMap.dragonSpawn != null) {
             dragon = new Dragon(this);
             int[] ds = tileM.currentMap.dragonSpawn;
             dragon.activate(ds[0], ds[1]);
+            dragon2 = new Dragon(this);
+            dragon2.activate(ds[0], ds[1], dragon.getWaterRegionId());
             dragonActive = true;
         }
     }

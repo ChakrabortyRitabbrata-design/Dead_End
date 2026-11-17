@@ -41,8 +41,8 @@ public class CollisionChecker {
                 entityTopRow = (entityTopWorldY - entity.speed) / gp.tileSize;
                 tileNum1 = safeGetTile(entityLeftCol,  entityTopRow);
                 tileNum2 = safeGetTile(entityRightCol, entityTopRow);
-                if (isSolid(entityLeftCol,  entityTopRow, tileNum1)
-                        || isSolid(entityRightCol, entityTopRow, tileNum2))
+                if (isSolid(entity, entityLeftCol,  entityTopRow, tileNum1)
+                        || isSolid(entity, entityRightCol, entityTopRow, tileNum2))
                     entity.collisionOn = true;
                 break;
 
@@ -50,8 +50,8 @@ public class CollisionChecker {
                 entityBottomRow = (entityBottomWorldY + entity.speed) / gp.tileSize;
                 tileNum1 = safeGetTile(entityLeftCol,  entityBottomRow);
                 tileNum2 = safeGetTile(entityRightCol, entityBottomRow);
-                if (isSolid(entityLeftCol,  entityBottomRow, tileNum1)
-                        || isSolid(entityRightCol, entityBottomRow, tileNum2))
+                if (isSolid(entity, entityLeftCol,  entityBottomRow, tileNum1)
+                        || isSolid(entity, entityRightCol, entityBottomRow, tileNum2))
                     entity.collisionOn = true;
                 break;
 
@@ -59,8 +59,8 @@ public class CollisionChecker {
                 entityLeftCol = (entityLeftWorldX - entity.speed) / gp.tileSize;
                 tileNum1 = safeGetTile(entityLeftCol, entityTopRow);
                 tileNum2 = safeGetTile(entityLeftCol, entityBottomRow);
-                if (isSolid(entityLeftCol, entityTopRow,    tileNum1)
-                        || isSolid(entityLeftCol, entityBottomRow, tileNum2))
+                if (isSolid(entity, entityLeftCol, entityTopRow,    tileNum1)
+                        || isSolid(entity, entityLeftCol, entityBottomRow, tileNum2))
                     entity.collisionOn = true;
                 break;
 
@@ -68,8 +68,8 @@ public class CollisionChecker {
                 entityRightCol = (entityRightWorldX + entity.speed) / gp.tileSize;
                 tileNum1 = safeGetTile(entityRightCol, entityTopRow);
                 tileNum2 = safeGetTile(entityRightCol, entityBottomRow);
-                if (isSolid(entityRightCol, entityTopRow,    tileNum1)
-                        || isSolid(entityRightCol, entityBottomRow, tileNum2))
+                if (isSolid(entity, entityRightCol, entityTopRow,    tileNum1)
+                        || isSolid(entity, entityRightCol, entityBottomRow, tileNum2))
                     entity.collisionOn = true;
                 break;
         }
@@ -93,7 +93,7 @@ public class CollisionChecker {
      * Returns true if the cell at (col, row) is solid.
      * Out-of-bounds → always solid (prevents walking off the map edge).
      */
-    private boolean isSolid(int col, int row, int tileId) {
+    private boolean isSolid(Entity entity, int col, int row, int tileId) {
         // Bounds check → solid
         if (col < 0 || col >= gp.maxWorldCol || row < 0 || row >= gp.maxWorldRow) return true;
         // Tile type collision

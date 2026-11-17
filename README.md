@@ -43,10 +43,10 @@ cmd /c ".\run.bat"
 
 | Input | Action |
 |---|---|
-| W | Move up |
-| A | Move left |
-| S | Move down |
-| D | Move right |
+| W / Up arrow | Move up |
+| A / Left arrow | Move left |
+| S / Down arrow | Move down |
+| D / Right arrow | Move right |
 | J / Left mouse button | Punch |
 | E / K | Kick |
 | Space | Attack with the equipped weapon |
@@ -82,8 +82,14 @@ slots. The gameplay hotbar remains visible during exploration.
 - Authored regions contain persistent enemy encounters; defeated enemies stay
   defeated. Reward values and gate requirements are configurable in
   `res/world/progression.properties`. Power is cumulative and never spent.
-- The dragon arena uses the existing proximity animation. Boss combat is not yet
-  implemented; its eventual defeat should call `LevelManager.onDragonDefeated()`.
+- Deep water is impassable to the player in every region, including region 3.
+- Two region 3 water dragons spawn in separate deep-water lakes. Both pursue
+  the player across passable land and water, use fireball and energy-pulse
+  attacks, and avoid blocked terrain. Defeat both to complete the boss encounter.
+- Both dragons use the four-direction sprite sheet in
+  `Dragon sprice game.jpeg`, with three animation frames for each direction.
+  Fireball and pulse/effect animation strips are generated from Java2D at
+  runtime. Their health and positions are persisted by the world save system.
 
 ## Verification
 
@@ -93,6 +99,16 @@ java -Djava.awt.headless=true -cp bin:res main.WorldIntegrationTest
 
 Checks navigation, rewards, gates, region state, save/load, fades and the boss
 callback. Creates actual Swing render captures in `out/world-checks/`.
+
+The water-dragon integration check exercises blocked player water boundaries,
+two-dragon land pursuit and attacks, both attack sequences, damage and boss
+save/load:
+
+```sh
+java -Djava.awt.headless=true -cp bin:res main.WaterDragonIntegrationTest
+```
+
+It also creates a boss-arena render capture in `out/world-checks/`.
 
 The merge check also exercises player animation states, directional combat
 hitboxes, monster animation rendering and the health HUD:
