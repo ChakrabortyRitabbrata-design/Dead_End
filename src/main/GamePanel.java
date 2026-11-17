@@ -54,10 +54,16 @@ public class GamePanel extends JPanel implements Runnable {
     // Game state
     // =========================================================================
 
-    public enum GameState { PLAYING, LEVEL_TRANSITION, FULL_MAP, INVENTORY, GAME_OVER, GAME_COMPLETE }
+    public enum GameState { MAIN_MENU, PLAYING, PAUSED, LEVEL_TRANSITION, FULL_MAP, INVENTORY, GAME_OVER, GAME_COMPLETE }
     public GameState gameState = GameState.PLAYING;
 
     public int score = 0;
+
+    public PauseMenuPanel pauseMenu;
+    public Runnable onPause;
+    public Runnable onResume;
+    public Runnable onRestart;
+    public Runnable onExit;
 
     // =========================================================================
     // Core subsystems (order matters — some reference each other)
@@ -113,11 +119,24 @@ public class GamePanel extends JPanel implements Runnable {
     // =========================================================================
 
     public GamePanel() {
+        this(null, null);
+    }
+
+    public GamePanel(Runnable onRestart, Runnable onExit) {
+        this.onRestart = onRestart;
+        this.onExit = onExit;
+
         this.setPreferredSize(new Dimension(screenWidth, screenHeight));
         this.setBackground(Color.BLACK);
         this.setDoubleBuffered(true);
         this.setFocusable(true);
         this.setFocusTraversalKeysEnabled(false);
+        this.setLayout(null);
+
+        pauseMenu = new PauseMenuPanel(this::resumeGame, this::restartGame, this::exitGame);
+        pauseMenu.setBounds(0, 0, screenWidth, screenHeight);
+        pauseMenu.setVisible(false);
+        this.add(pauseMenu);
 
         this.addKeyListener(keyH);
         this.addFocusListener(keyH);
@@ -189,6 +208,92 @@ public class GamePanel extends JPanel implements Runnable {
         gameTimer.start();
     }
 
+    public void stopGameThread() {
+        if (gameTimer != null && gameTimer.isRunning()) {
+            gameTimer.stop();
+        }
+    }
+
+    public void pauseGame() {
+        if (gameState != GameState.PLAYING) return;
+        gameState = GameState.PAUSED;
+        keyH.clearAllInputs();
+        if (onPause != null) {
+            onPause.run();
+        } else if (pauseMenu != null) {
+            pauseMenu.setVisible(true);
+            javax.swing.SwingUtilities.invokeLater(pauseMenu::focusResumeButton);
+        }
+        repaint();
+    }
+
+    public void resumeGame() {
+        if (gameState != GameState.PAUSED) return;
+        if (onResume != null) {
+            onResume.run();
+        }
+        if (pauseMenu != null) {
+            pauseMenu.setVisible(false);
+        }
+        gameState = GameState.PLAYING;
+        lastUpdateNanos = System.nanoTime();
+        keyH.clearAllInputs();
+        javax.swing.SwingUtilities.invokeLater(this::requestFocusInWindow);
+        repaint();
+    }
+
+    public void restartGame() {
+        if (pauseMenu != null) {
+            pauseMenu.setVisible(false);
+        }
+        if (onRestart != null) {
+            onRestart.run();
+            return;
+        }
+        restartSession();
+    }
+
+    public void restartSession() {
+        if (pauseMenu != null) {
+            pauseMenu.setVisible(false);
+        }
+        keyH.clearAllInputs();
+        levelM = new LevelManager(this);
+        try {
+            tileM.loadLevel(1);
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+        }
+        applyPlayerSpawn();
+        player.restoreHealth(player.getMaxHealth());
+        player.resetActionState();
+        inventory = new Inventory();
+        hotbar = new Hotbar(inventory);
+        equipmentManager = new EquipmentManager();
+        inventoryUI = new InventoryUI(inventory, hotbar, equipmentManager, this);
+        objects.clear();
+        monsters.clear();
+        dragon = null;
+        dragon2 = null;
+        dragonActive = false;
+        activateDragonFromMap();
+        setupGame();
+        score = 0;
+        gameState = GameState.PLAYING;
+        lastUpdateNanos = System.nanoTime();
+        javax.swing.SwingUtilities.invokeLater(this::requestFocusInWindow);
+        repaint();
+    }
+
+    public void exitGame() {
+        stopGameThread();
+        if (onExit != null) {
+            onExit.run();
+        } else {
+            System.exit(0);
+        }
+    }
+
     // =========================================================================
     // Game loop
     // =========================================================================
@@ -227,6 +332,34 @@ public class GamePanel extends JPanel implements Runnable {
 
     /** Delta-time update used by the animation controller. */
     public void update(long deltaNanos) {
+        // --- ESC handling across states ---
+        if (keyH.consumeEscape()) {
+            keyH.inventoryClosePressed = false;
+            if (gameState == GameState.PAUSED) {
+                resumeGame();
+                return;
+            } else if (inventoryUI.isVisible()) {
+                inventoryUI.hide();
+                gameState = GameState.PLAYING;
+                return;
+            } else if (gameState == GameState.FULL_MAP) {
+                toggleFullMap();
+                return;
+            } else if (gameState == GameState.PLAYING) {
+                pauseGame();
+                return;
+            }
+        }
+        if (keyH.inventoryClosePressed) {
+            keyH.inventoryClosePressed = false;
+            if (inventoryUI.isVisible()) {
+                inventoryUI.hide();
+                gameState = GameState.PLAYING;
+            }
+        }
+        if (gameState == GameState.PAUSED) {
+            return;
+        }
         if (keyH.inventoryTogglePressed) {
             keyH.inventoryTogglePressed = false;
             if (gameState == GameState.PLAYING) {
@@ -235,13 +368,6 @@ public class GamePanel extends JPanel implements Runnable {
             } else if (gameState == GameState.INVENTORY) {
                 gameState = GameState.PLAYING;
                 inventoryUI.hide();
-            }
-        }
-        if (keyH.inventoryClosePressed) {
-            keyH.inventoryClosePressed = false;
-            if (inventoryUI.isVisible()) {
-                inventoryUI.hide();
-                gameState = GameState.PLAYING;
             }
         }
         if (keyH.hotbarKeyPressed > 0) {
@@ -265,7 +391,6 @@ public class GamePanel extends JPanel implements Runnable {
         }
         // --- Input routing (works in ALL states) ---
         if (keyH.consumeMapToggle())                          toggleFullMap();
-        if (keyH.consumeEscape() && gameState == GameState.FULL_MAP) toggleFullMap();
 
         // --- Level transition animation tick ---
         if (gameState == GameState.LEVEL_TRANSITION) {
@@ -320,7 +445,15 @@ public class GamePanel extends JPanel implements Runnable {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        Graphics2D g2 = (Graphics2D) g;
+        Graphics2D g2 = (Graphics2D) g.create();
+
+        if (gameState == GameState.PAUSED) {
+            g2.setColor(Color.BLACK);
+            g2.fillRect(0, 0, screenWidth, screenHeight);
+            g2.dispose();
+            return;
+        }
+
         updateCamera();
 
         // --- World (ground tiles) ---
