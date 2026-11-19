@@ -15,8 +15,7 @@ import javax.swing.SwingUtilities;
 /**
  * In-game Pause Menu screen.
  * Displays a completely black background with heading "GAME PAUSED"
- * and exactly three buttons: RESUME, RESTART, and EXIT.
- * Consistent with the modern minimalist RPG aesthetic of the Main Menu.
+ * and interactive RPG buttons with full keyboard and mouse support.
  */
 public class PauseMenuPanel extends JPanel {
 
@@ -24,15 +23,22 @@ public class PauseMenuPanel extends JPanel {
     public static final int PANEL_HEIGHT = 576;
 
     private final Runnable onResume;
+    private final Runnable onOpenLeaderboard;
     private final Runnable onRestart;
     private final Runnable onExit;
 
     private final RpgButton resumeButton;
+    private final RpgButton leaderboardButton;
     private final RpgButton restartButton;
     private final RpgButton exitButton;
 
     public PauseMenuPanel(Runnable onResume, Runnable onRestart, Runnable onExit) {
+        this(onResume, null, onRestart, onExit);
+    }
+
+    public PauseMenuPanel(Runnable onResume, Runnable onOpenLeaderboard, Runnable onRestart, Runnable onExit) {
         this.onResume = onResume;
+        this.onOpenLeaderboard = onOpenLeaderboard;
         this.onRestart = onRestart;
         this.onExit = onExit;
 
@@ -42,56 +48,100 @@ public class PauseMenuPanel extends JPanel {
         setFocusable(true);
 
         int buttonWidth = 240;
-        int buttonHeight = 46;
         int buttonX = (PANEL_WIDTH - buttonWidth) / 2;
 
-        resumeButton = new RpgButton("RESUME");
-        resumeButton.setBounds(buttonX, 275, buttonWidth, buttonHeight);
-        resumeButton.addActionListener(e -> resume());
+        boolean hasLeaderboard = (onOpenLeaderboard != null);
+        int buttonHeight = hasLeaderboard ? 40 : 46;
 
-        restartButton = new RpgButton("RESTART");
-        restartButton.setBounds(buttonX, 340, buttonWidth, buttonHeight);
-        restartButton.addActionListener(e -> restart());
+        if (hasLeaderboard) {
+            resumeButton = new RpgButton("RESUME");
+            resumeButton.setBounds(buttonX, 260, buttonWidth, buttonHeight);
+            resumeButton.addActionListener(e -> resume());
 
-        exitButton = new RpgButton("EXIT");
-        exitButton.setBounds(buttonX, 405, buttonWidth, buttonHeight);
-        exitButton.addActionListener(e -> exit());
+            leaderboardButton = new RpgButton("LEADERBOARD");
+            leaderboardButton.setBounds(buttonX, 308, buttonWidth, buttonHeight);
+            leaderboardButton.addActionListener(e -> openLeaderboard());
 
-        // Keyboard navigation across the 3 buttons + ESC to resume
-        KeyAdapter navKeyAdapter = new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                int code = e.getKeyCode();
-                if (code == KeyEvent.VK_ESCAPE) {
-                    resume();
-                } else if (code == KeyEvent.VK_UP || code == KeyEvent.VK_W) {
-                    if (exitButton.isFocusOwner()) {
-                        restartButton.requestFocusInWindow();
-                    } else if (restartButton.isFocusOwner()) {
-                        resumeButton.requestFocusInWindow();
-                    } else {
-                        exitButton.requestFocusInWindow();
-                    }
-                } else if (code == KeyEvent.VK_DOWN || code == KeyEvent.VK_S) {
-                    if (resumeButton.isFocusOwner()) {
-                        restartButton.requestFocusInWindow();
-                    } else if (restartButton.isFocusOwner()) {
-                        exitButton.requestFocusInWindow();
-                    } else {
-                        resumeButton.requestFocusInWindow();
+            restartButton = new RpgButton("RESTART");
+            restartButton.setBounds(buttonX, 356, buttonWidth, buttonHeight);
+            restartButton.addActionListener(e -> restart());
+
+            exitButton = new RpgButton("EXIT");
+            exitButton.setBounds(buttonX, 404, buttonWidth, buttonHeight);
+            exitButton.addActionListener(e -> exit());
+
+            KeyAdapter navKeyAdapter = new KeyAdapter() {
+                @Override
+                public void keyPressed(KeyEvent e) {
+                    int code = e.getKeyCode();
+                    if (code == KeyEvent.VK_ESCAPE) {
+                        resume();
+                    } else if (code == KeyEvent.VK_UP || code == KeyEvent.VK_W) {
+                        if (exitButton.isFocusOwner()) restartButton.requestFocusInWindow();
+                        else if (restartButton.isFocusOwner()) leaderboardButton.requestFocusInWindow();
+                        else if (leaderboardButton.isFocusOwner()) resumeButton.requestFocusInWindow();
+                        else exitButton.requestFocusInWindow();
+                    } else if (code == KeyEvent.VK_DOWN || code == KeyEvent.VK_S) {
+                        if (resumeButton.isFocusOwner()) leaderboardButton.requestFocusInWindow();
+                        else if (leaderboardButton.isFocusOwner()) restartButton.requestFocusInWindow();
+                        else if (restartButton.isFocusOwner()) exitButton.requestFocusInWindow();
+                        else resumeButton.requestFocusInWindow();
                     }
                 }
-            }
-        };
+            };
 
-        resumeButton.addKeyListener(navKeyAdapter);
-        restartButton.addKeyListener(navKeyAdapter);
-        exitButton.addKeyListener(navKeyAdapter);
-        this.addKeyListener(navKeyAdapter);
+            resumeButton.addKeyListener(navKeyAdapter);
+            leaderboardButton.addKeyListener(navKeyAdapter);
+            restartButton.addKeyListener(navKeyAdapter);
+            exitButton.addKeyListener(navKeyAdapter);
+            this.addKeyListener(navKeyAdapter);
 
-        add(resumeButton);
-        add(restartButton);
-        add(exitButton);
+            add(resumeButton);
+            add(leaderboardButton);
+            add(restartButton);
+            add(exitButton);
+        } else {
+            leaderboardButton = null;
+
+            resumeButton = new RpgButton("RESUME");
+            resumeButton.setBounds(buttonX, 275, buttonWidth, buttonHeight);
+            resumeButton.addActionListener(e -> resume());
+
+            restartButton = new RpgButton("RESTART");
+            restartButton.setBounds(buttonX, 340, buttonWidth, buttonHeight);
+            restartButton.addActionListener(e -> restart());
+
+            exitButton = new RpgButton("EXIT");
+            exitButton.setBounds(buttonX, 405, buttonWidth, buttonHeight);
+            exitButton.addActionListener(e -> exit());
+
+            KeyAdapter navKeyAdapter = new KeyAdapter() {
+                @Override
+                public void keyPressed(KeyEvent e) {
+                    int code = e.getKeyCode();
+                    if (code == KeyEvent.VK_ESCAPE) {
+                        resume();
+                    } else if (code == KeyEvent.VK_UP || code == KeyEvent.VK_W) {
+                        if (exitButton.isFocusOwner()) restartButton.requestFocusInWindow();
+                        else if (restartButton.isFocusOwner()) resumeButton.requestFocusInWindow();
+                        else exitButton.requestFocusInWindow();
+                    } else if (code == KeyEvent.VK_DOWN || code == KeyEvent.VK_S) {
+                        if (resumeButton.isFocusOwner()) restartButton.requestFocusInWindow();
+                        else if (restartButton.isFocusOwner()) exitButton.requestFocusInWindow();
+                        else resumeButton.requestFocusInWindow();
+                    }
+                }
+            };
+
+            resumeButton.addKeyListener(navKeyAdapter);
+            restartButton.addKeyListener(navKeyAdapter);
+            exitButton.addKeyListener(navKeyAdapter);
+            this.addKeyListener(navKeyAdapter);
+
+            add(resumeButton);
+            add(restartButton);
+            add(exitButton);
+        }
     }
 
     public void focusResumeButton() {
@@ -106,6 +156,10 @@ public class PauseMenuPanel extends JPanel {
 
     private void resume() {
         if (onResume != null) onResume.run();
+    }
+
+    private void openLeaderboard() {
+        if (onOpenLeaderboard != null) onOpenLeaderboard.run();
     }
 
     private void restart() {
@@ -137,7 +191,7 @@ public class PauseMenuPanel extends JPanel {
         FontMetrics hfm = g2.getFontMetrics();
         int headingWidth = hfm.stringWidth(heading);
         int headingX = centerX - headingWidth / 2;
-        int headingY = 175;
+        int headingY = 165;
 
         // Soft drop shadow
         g2.setColor(new Color(30, 30, 35));
@@ -149,7 +203,7 @@ public class PauseMenuPanel extends JPanel {
 
         // --- Divider Line with Diamond Accent ---
         int lineWidth = 280;
-        int lineY = 208;
+        int lineY = 196;
         g2.setColor(new Color(75, 75, 82));
         g2.drawLine(centerX - lineWidth / 2, lineY, centerX + lineWidth / 2, lineY);
 
@@ -165,7 +219,7 @@ public class PauseMenuPanel extends JPanel {
         FontMetrics sfm = g2.getFontMetrics();
         int subWidth = sfm.stringWidth(subtitle);
         g2.setColor(new Color(130, 130, 140));
-        g2.drawString(subtitle, centerX - subWidth / 2, 232);
+        g2.drawString(subtitle, centerX - subWidth / 2, 220);
 
         // --- Subtle Bottom Hints ---
         String footerHint = "PRESS ESC TO RESUME  |  ARROW KEYS TO SELECT  |  ENTER TO CONFIRM";

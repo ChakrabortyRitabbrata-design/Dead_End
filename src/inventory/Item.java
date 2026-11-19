@@ -13,8 +13,10 @@ import java.awt.image.BufferedImage;
 public class Item {
 
     // ── Identity ────────────────────────────────────────────────────────────
+    public String id;
     public String name;
     public String description;
+    public String rarity = "COMMON";
     public ItemType type;
     public BufferedImage icon; // null = use placeholder
 
@@ -105,6 +107,8 @@ public class Item {
     /** Returns a shallow copy of this item (same icon reference). */
     public Item copy() {
         Item copy = new Item(name, description, type, maxStackSize);
+        copy.id            = this.id;
+        copy.rarity        = this.rarity;
         copy.stackSize     = this.stackSize;
         copy.icon          = this.icon;
         copy.compatibleSlot = this.compatibleSlot;

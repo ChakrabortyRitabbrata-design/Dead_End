@@ -17,6 +17,7 @@ import entities.Monster;
 import entities.Player;
 import inventory.EquipmentManager;
 import inventory.EquipmentSlot;
+import inventory.ExecutionerSword;
 import inventory.Hotbar;
 import inventory.Inventory;
 import inventory.InventoryUI;
@@ -64,6 +65,8 @@ public class GamePanel extends JPanel implements Runnable {
     public Runnable onResume;
     public Runnable onRestart;
     public Runnable onExit;
+    public Runnable onOpenLeaderboard;
+    private boolean sessionScoreRecorded = false;
 
     // =========================================================================
     // Core subsystems (order matters — some reference each other)
@@ -83,6 +86,9 @@ public class GamePanel extends JPanel implements Runnable {
     public LevelManager   levelM;
     public DecorRenderer  decorR;
     public WorldRenderer worldRenderer;
+
+    public boolean executionerSwordUnlocked = false;
+    public final ExecutionerSwordNotification executionerNotification;
 
     // =========================================================================
     // World objects
@@ -147,6 +153,7 @@ public class GamePanel extends JPanel implements Runnable {
         fogOfWar = new FogOfWar(maxWorldCol, maxWorldRow);
         minimap  = new Minimap(this);
         levelM   = new LevelManager(this);
+        executionerNotification = new ExecutionerSwordNotification(this);
 
         // Build the decor/vegetation renderer from the loaded map
         if (!tileM.currentMap.authoredWorld) {
@@ -279,10 +286,32 @@ public class GamePanel extends JPanel implements Runnable {
         activateDragonFromMap();
         setupGame();
         score = 0;
+        sessionScoreRecorded = false;
         gameState = GameState.PLAYING;
         lastUpdateNanos = System.nanoTime();
         javax.swing.SwingUtilities.invokeLater(this::requestFocusInWindow);
         repaint();
+    }
+
+    public void persistSessionScore() {
+        if (sessionScoreRecorded) return;
+        sessionScoreRecorded = true;
+
+        if (db.SessionManager.isLoggedIn()) {
+            final int finalScore = (int) levelM.progression.score();
+            final int userId = db.SessionManager.getUserId();
+            new Thread(() -> {
+                try {
+                    db.ScoreDAO.saveScore(userId, finalScore);
+                    int high = db.ScoreDAO.getUserHighScore(userId);
+                    if (db.SessionManager.getCurrentUser() != null) {
+                        db.SessionManager.getCurrentUser().setHighScore(high);
+                    }
+                } catch (Exception e) {
+                    // Fail silently
+                }
+            }).start();
+        }
     }
 
     public void exitGame() {
@@ -376,9 +405,27 @@ public class GamePanel extends JPanel implements Runnable {
             keyH.hotbarKeyPressed = -1;
         }
         if (gameState == GameState.GAME_OVER) {
+            persistSessionScore();
+            if (keyH.consumeLeaderboard() && onOpenLeaderboard != null) {
+                onOpenLeaderboard.run();
+                return;
+            }
             if (keyH.consumeRespawn()) {
+                sessionScoreRecorded = false;
                 respawnPlayer();
             }
+            return;
+        }
+        if (gameState == GameState.GAME_COMPLETE) {
+            persistSessionScore();
+            if (keyH.consumeLeaderboard() && onOpenLeaderboard != null) {
+                onOpenLeaderboard.run();
+                return;
+            }
+            return;
+        }
+        if (keyH.consumeLeaderboard() && onOpenLeaderboard != null) {
+            onOpenLeaderboard.run();
             return;
         }
         if (keyH.consumeFit()) minimap.resetFullMapView();
@@ -436,6 +483,8 @@ public class GamePanel extends JPanel implements Runnable {
 
         replenishMonsters();
         levelM.checkProgression();
+        checkExecutionerSwordUnlock();
+        executionerNotification.update();
     }
 
     // =========================================================================
@@ -495,6 +544,8 @@ public class GamePanel extends JPanel implements Runnable {
             inventoryUI.draw(g2, screenWidth, screenHeight);
         }
 
+        executionerNotification.draw(g2, screenWidth, screenHeight);
+
         // --- Full-screen map overlay ---
         if (gameState == GameState.FULL_MAP) {
             minimap.drawFullMap(g2);
@@ -509,14 +560,20 @@ public class GamePanel extends JPanel implements Runnable {
         // --- Game complete screen ---
         if (gameState == GameState.GAME_COMPLETE) {
             drawEndScreen(g2, "YOU SURVIVED", new Color(255, 215, 0));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
+            g2.setColor(Color.WHITE);
+            String prompt = "Victory Score: " + levelM.progression.score() + "  |  Press L for Leaderboard";
+            var promptMetrics = g2.getFontMetrics();
+            g2.drawString(prompt, (screenWidth - promptMetrics.stringWidth(prompt)) / 2,
+                    screenHeight / 2 + 78);
         }
 
         // --- Game over screen ---
         if (gameState == GameState.GAME_OVER) {
             drawEndScreen(g2, "DEAD END", new Color(180, 0, 0));
-            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+            g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
             g2.setColor(Color.WHITE);
-            String prompt = "Press R to respawn at the starting position";
+            String prompt = "Press R to respawn  |  Press L for Leaderboard";
             var promptMetrics = g2.getFontMetrics();
             g2.drawString(prompt, (screenWidth - promptMetrics.stringWidth(prompt)) / 2,
                     screenHeight / 2 + 78);
@@ -755,6 +812,52 @@ public class GamePanel extends JPanel implements Runnable {
             dragon2 = new Dragon(this);
             dragon2.activate(ds[0], ds[1], dragon.getWaterRegionId());
             dragonActive = true;
+        }
+    }
+
+    public void checkExecutionerSwordUnlock() {
+        if (!executionerSwordUnlocked && levelM != null && levelM.currentLevel == 3 && levelM.progression.score() >= 250) {
+            executionerSwordUnlocked = true;
+            if (!hasExecutionerSword()) {
+                inventory.ExecutionerSword sword = new inventory.ExecutionerSword();
+                inventory.addItem(sword);
+            }
+            executionerNotification.trigger();
+        }
+    }
+
+    public boolean hasExecutionerSword() {
+        if (equipmentManager != null) {
+            Item eq = equipmentManager.getEquipped(EquipmentSlot.MAIN_HAND);
+            if (eq != null && ("executioner_sword".equalsIgnoreCase(eq.id) || "EXECUTIONER SWORD".equalsIgnoreCase(eq.name))) {
+                return true;
+            }
+        }
+        if (inventory != null) {
+            for (int i = 0; i < Inventory.TOTAL_SLOTS; i++) {
+                Item item = inventory.getSlot(i);
+                if (item != null && ("executioner_sword".equalsIgnoreCase(item.id) || "EXECUTIONER SWORD".equalsIgnoreCase(item.name))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public void removeExecutionerSword() {
+        if (equipmentManager != null) {
+            Item eq = equipmentManager.getEquipped(EquipmentSlot.MAIN_HAND);
+            if (eq != null && ("executioner_sword".equalsIgnoreCase(eq.id) || "EXECUTIONER SWORD".equalsIgnoreCase(eq.name))) {
+                equipmentManager.unequip(EquipmentSlot.MAIN_HAND);
+            }
+        }
+        if (inventory != null) {
+            for (int i = 0; i < Inventory.TOTAL_SLOTS; i++) {
+                Item item = inventory.getSlot(i);
+                if (item != null && ("executioner_sword".equalsIgnoreCase(item.id) || "EXECUTIONER SWORD".equalsIgnoreCase(item.name))) {
+                    inventory.setSlot(i, null);
+                }
+            }
         }
     }
 }

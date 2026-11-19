@@ -41,6 +41,7 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     private boolean loadRequested;
     private boolean fitRequested;
     private boolean mapToggleRequested;
+    private boolean leaderboardRequested;
     private boolean escapeRequested;
     private boolean mapKeyHeld;
     private boolean escapeKeyHeld;
@@ -103,6 +104,11 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
                 if (!mapKeyHeld) {
                     mapToggleRequested = true;
                     mapKeyHeld = true;
+                }
+            }
+            case KeyEvent.VK_L -> {
+                if (commandHeld.add(code)) {
+                    leaderboardRequested = true;
                 }
             }
             case KeyEvent.VK_ESCAPE -> {
@@ -266,12 +272,21 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
     public synchronized boolean consumeFit() {
         boolean requested = fitRequested;
         fitRequested = false;
+        mapToggleRequested = false;
+        leaderboardRequested = false;
+        escapeRequested = false;
         return requested;
     }
 
     public synchronized boolean consumeMapToggle() {
         boolean requested = mapToggleRequested;
         mapToggleRequested = false;
+        return requested;
+    }
+
+    public synchronized boolean consumeLeaderboard() {
+        boolean requested = leaderboardRequested;
+        leaderboardRequested = false;
         return requested;
     }
 
@@ -363,6 +378,9 @@ public class KeyHandler implements KeyListener, FocusListener, MouseListener {
         saveRequested = false;
         loadRequested = false;
         fitRequested = false;
+        mapToggleRequested = false;
+        leaderboardRequested = false;
+        escapeRequested = false;
         commandHeld.clear();
         inputOrder = 0;
         upOrder = 0;

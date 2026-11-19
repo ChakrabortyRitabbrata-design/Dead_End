@@ -125,6 +125,16 @@ public class WeaponRenderer {
         Weapon w = isAttacking() ? activeWeapon : weapon;
         if (w == null) return;
 
+        if (w instanceof inventory.ExecutionerSword
+                || "executioner_sword".equalsIgnoreCase(w.id)
+                || "EXECUTIONER SWORD".equalsIgnoreCase(w.name)) {
+            // Executioner Sword is fully integrated into the character's movement sprite sheet
+            if (!"BEHIND".equalsIgnoreCase(renderPhase) && isAttacking()) {
+                drawParticles(g2);
+            }
+            return;
+        }
+
         WeaponAttachment.AttachmentData att = WeaponAttachment.getAttachment(animState, dir, frameIndex);
 
         // Filter based on draw order phase

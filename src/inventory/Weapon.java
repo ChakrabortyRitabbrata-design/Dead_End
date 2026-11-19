@@ -126,6 +126,8 @@ public class Weapon extends Item {
     @Override
     public Item copy() {
         Weapon w = new Weapon(name, description, damage, attackSpeed, range, weaponClass);
+        w.id = this.id;
+        w.rarity = this.rarity;
         w.icon = this.icon;
         w.compatibleSlot = this.compatibleSlot;
         return w;

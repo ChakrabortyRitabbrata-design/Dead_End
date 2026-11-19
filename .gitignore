@@ -8,3 +8,5 @@ saves/
 .metadata/
 .settings/
 Dead_End/
+.env
+

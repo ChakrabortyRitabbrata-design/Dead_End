@@ -43,6 +43,7 @@ public class Monster {
     public int worldX;
     public int worldY;
     public int health = maxHealth;
+    public int getMaxHealth() { return maxHealth; }
 
     private int animationCounter;
     private int animationFrame;
@@ -237,7 +238,11 @@ public class Monster {
             return;
         }
         lastPlayerAttackSequence = gp.player.attackSequence;
-        takeDamage(gp.player.getAttackDamage(), gp.player.getFacing());
+        int damage = gp.player.getAttackDamage();
+        if (gp.player.isExecutionerSwordEquipped()) {
+            damage = Math.max(damage, maxHealth); // 1-hit kill for regular zombies
+        }
+        takeDamage(damage, gp.player.getFacing());
     }
 
     private void followPlayer() {
@@ -387,6 +392,10 @@ public class Monster {
 
     public boolean isDead() {
         return dead;
+    }
+
+    public boolean isDying() {
+        return dying;
     }
 
     public void draw(Graphics2D g2) {

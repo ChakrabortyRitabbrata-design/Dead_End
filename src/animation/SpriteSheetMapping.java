@@ -236,6 +236,38 @@ public final class SpriteSheetMapping {
         return new Rectangle(xs[row][f], ys[row][f], ws[row][f], hs[row][f]);
     }
 
+    public static Rectangle executionerFrameBounds(int row, Direction direction, int frame) {
+        int col;
+        switch (direction) {
+            case DOWN -> col = 0;
+            case RIGHT -> col = 1;
+            case LEFT -> col = 2;
+            case UP -> col = 3;
+            default -> col = 0;
+        }
+        int secW = 543;
+        int rowH = 181;
+        int frameW = secW / 4;
+        int f = Math.max(0, Math.min(3, frame));
+        return new Rectangle(col * secW + f * frameW, row * rowH, frameW, rowH);
+    }
+
+    public static Rectangle executionerIdleBounds(Direction direction, int frame) {
+        return executionerFrameBounds(0, direction, frame);
+    }
+
+    public static Rectangle executionerWalkingBounds(Direction direction, int frame) {
+        return executionerFrameBounds(1, direction, frame);
+    }
+
+    public static Rectangle executionerActionBounds(Direction direction, int frame) {
+        return executionerFrameBounds(2, direction, frame);
+    }
+
+    public static Rectangle executionerAttackBounds(Direction direction, int frame) {
+        return executionerFrameBounds(3, direction, frame);
+    }
+
     private static Rectangle centeredBounds(int centerX, int centerY) {
         int halfSize = SOURCE_FRAME_SIZE / 2;
         return new Rectangle(centerX - halfSize, centerY - halfSize,

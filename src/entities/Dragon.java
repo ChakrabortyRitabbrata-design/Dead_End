@@ -35,6 +35,7 @@ public class Dragon {
     }
 
     private static final int MAX_HEALTH = 300;
+    public int getMaxHealth() { return MAX_HEALTH; }
     private static final int FIREBALL_DAMAGE = 14;
     private static final int PULSE_DAMAGE = 22;
     private static final int FIREBALL_SPEED = 260;
@@ -857,6 +858,9 @@ public class Dragon {
         lastPlayerAttackSequence = gp.player.attackSequence;
         Direction direction = gp.player.getFacing();
         int damage = gp.player.getAttackDamage();
+        if (gp.player.isExecutionerSwordEquipped()) {
+            damage = MAX_HEALTH / 2; // Exactly 50% max health per hit (150 damage)
+        }
         takeDamage(damage);
         if (health > 0 && damage >= 20) {
             state = State.STUNNED;

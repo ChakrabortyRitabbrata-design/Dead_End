@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import entities.*;
+import inventory.*;
 import tile.*;
 
 /** Physical gate routing and persistent region sessions. */
@@ -95,6 +96,22 @@ public class LevelManager {
         p.setProperty("version","1");p.setProperty("region",Integer.toString(currentLevel));
         p.setProperty("x",Integer.toString(gp.player.worldX));p.setProperty("y",Integer.toString(gp.player.worldY));
         p.setProperty("health",Integer.toString(gp.player.getHealth()));
+        p.setProperty("executionerSword.unlocked", Boolean.toString(gp.executionerSwordUnlocked));
+        boolean isEquipped = gp.player.isExecutionerSwordEquipped();
+        int slotPos = -1;
+        if (!isEquipped && gp.inventory != null) {
+            for (int i = 0; i < Inventory.TOTAL_SLOTS; i++) {
+                Item it = gp.inventory.getSlot(i);
+                if (it != null && ("executioner_sword".equalsIgnoreCase(it.id) || "EXECUTIONER SWORD".equalsIgnoreCase(it.name))) {
+                    slotPos = i;
+                    break;
+                }
+            }
+        }
+        boolean owned = isEquipped || (slotPos >= 0);
+        p.setProperty("executionerSword.owned", Boolean.toString(owned));
+        p.setProperty("executionerSword.equipped", Boolean.toString(isEquipped));
+        p.setProperty("executionerSword.slot", Integer.toString(slotPos));
         for(var entry:regions.entrySet()) {
             String prefix="region."+entry.getKey()+".";RegionState s=entry.getValue();
             p.setProperty(prefix+"fog",s.fog.encode());List<String> enemies=new ArrayList<>();
@@ -208,6 +225,28 @@ public class LevelManager {
             gp.keyH.clearAllInputs();gp.player.resetActionState();
             gp.fogOfWar.update(x/48,y/48);fadeAlpha=0;transitioning=false;
             gp.gameState=next.rewarded("3-dragon")?GamePanel.GameState.GAME_COMPLETE:GamePanel.GameState.PLAYING;
+
+            boolean esUnlocked = Boolean.parseBoolean(p.getProperty("executionerSword.unlocked", "false"));
+            boolean esOwned = Boolean.parseBoolean(p.getProperty("executionerSword.owned", "false"));
+            boolean esEquipped = Boolean.parseBoolean(p.getProperty("executionerSword.equipped", "false"));
+            int esSlot = Integer.parseInt(p.getProperty("executionerSword.slot", "-1"));
+
+            gp.executionerSwordUnlocked = esUnlocked;
+            gp.removeExecutionerSword();
+
+            if (esOwned) {
+                ExecutionerSword sword = new ExecutionerSword();
+                if (esEquipped && gp.equipmentManager != null) {
+                    gp.equipmentManager.equip(EquipmentSlot.MAIN_HAND, sword);
+                } else if (gp.inventory != null) {
+                    if (esSlot >= 0 && esSlot < Inventory.TOTAL_SLOTS && gp.inventory.getSlot(esSlot) == null) {
+                        gp.inventory.setSlot(esSlot, sword);
+                    } else {
+                        gp.inventory.addItem(sword);
+                    }
+                }
+            }
+
             notifyPlayer("World restored");
         } catch(RuntimeException e) {throw new IOException("Invalid save: "+e.getMessage(),e);}
     }

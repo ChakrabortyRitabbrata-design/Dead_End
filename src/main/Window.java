@@ -1,5 +1,6 @@
 package main;
 
+import db.SessionManager;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import javax.swing.JFrame;
@@ -9,6 +10,10 @@ import javax.swing.SwingUtilities;
 public class Window {
     private static GamePanel currentGamePanel;
     private static PauseMenuPanel pauseMenuPanel;
+    private static LeaderboardPanel leaderboardPanel;
+    private static AuthPanel authPanel;
+    private static MainMenuPanel menuPanel;
+    private static String returnScreen = "MENU";
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(Window::open);
@@ -25,14 +30,56 @@ public class Window {
         JPanel rootPanel = new JPanel(cardLayout);
         rootPanel.setPreferredSize(new Dimension(MainMenuPanel.PANEL_WIDTH, MainMenuPanel.PANEL_HEIGHT));
 
-        MainMenuPanel menuPanel = new MainMenuPanel(
+        // 1. Auth Panel (Login / Register / Guest)
+        authPanel = new AuthPanel(() -> {
+            cardLayout.show(rootPanel, "MENU");
+            menuPanel.repaint();
+            SwingUtilities.invokeLater(menuPanel::focusStartButton);
+        });
+
+        // 2. Leaderboard Panel
+        leaderboardPanel = new LeaderboardPanel(() -> {
+            if ("PAUSE".equals(returnScreen)) {
+                cardLayout.show(rootPanel, "PAUSE");
+                SwingUtilities.invokeLater(pauseMenuPanel::focusResumeButton);
+            } else if ("GAME".equals(returnScreen)) {
+                cardLayout.show(rootPanel, "GAME");
+                if (currentGamePanel != null) {
+                    SwingUtilities.invokeLater(currentGamePanel::requestFocusInWindow);
+                }
+            } else {
+                cardLayout.show(rootPanel, "MENU");
+                menuPanel.repaint();
+                SwingUtilities.invokeLater(menuPanel::focusStartButton);
+            }
+        });
+
+        // 3. Main Menu Panel (with Leaderboard & Logout)
+        menuPanel = new MainMenuPanel(
+            // Start Game
             () -> startNewGame(frame, rootPanel, cardLayout),
+            // Open Leaderboard
+            () -> {
+                returnScreen = "MENU";
+                leaderboardPanel.refreshScores();
+                cardLayout.show(rootPanel, "LEADERBOARD");
+                SwingUtilities.invokeLater(leaderboardPanel::focusBackButton);
+            },
+            // Logout / Switch User
+            () -> {
+                SessionManager.logout();
+                authPanel.resetFields();
+                cardLayout.show(rootPanel, "AUTH");
+                SwingUtilities.invokeLater(authPanel::focusUsernameField);
+            },
+            // Exit
             () -> {
                 frame.dispose();
                 System.exit(0);
             }
         );
 
+        // 4. Pause Menu Panel
         pauseMenuPanel = new PauseMenuPanel(
             // RESUME: return to active game
             () -> {
@@ -40,6 +87,13 @@ public class Window {
                     cardLayout.show(rootPanel, "GAME");
                     currentGamePanel.resumeGame();
                 }
+            },
+            // LEADERBOARD: view leaderboard during pause
+            () -> {
+                returnScreen = "PAUSE";
+                leaderboardPanel.refreshScores();
+                cardLayout.show(rootPanel, "LEADERBOARD");
+                SwingUtilities.invokeLater(leaderboardPanel::focusBackButton);
             },
             // RESTART: start fresh session
             () -> startNewGame(frame, rootPanel, cardLayout),
@@ -53,15 +107,19 @@ public class Window {
             }
         );
 
+        rootPanel.add(authPanel, "AUTH");
         rootPanel.add(menuPanel, "MENU");
         rootPanel.add(pauseMenuPanel, "PAUSE");
+        rootPanel.add(leaderboardPanel, "LEADERBOARD");
         frame.add(rootPanel);
 
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
 
-        cardLayout.show(rootPanel, "MENU");
+        // Launch into authentication screen
+        cardLayout.show(rootPanel, "AUTH");
+        SwingUtilities.invokeLater(authPanel::focusUsernameField);
     }
 
     private static void startNewGame(JFrame frame, JPanel rootPanel, CardLayout cardLayout) {
@@ -94,6 +152,14 @@ public class Window {
         gamePanel.onResume = () -> {
             cardLayout.show(rootPanel, "GAME");
             SwingUtilities.invokeLater(gamePanel::requestFocusInWindow);
+        };
+
+        // When leaderboard requested in-game (e.g. game over / complete / L key)
+        gamePanel.onOpenLeaderboard = () -> {
+            returnScreen = "GAME";
+            leaderboardPanel.refreshScores();
+            cardLayout.show(rootPanel, "LEADERBOARD");
+            SwingUtilities.invokeLater(leaderboardPanel::focusBackButton);
         };
 
         currentGamePanel = gamePanel;

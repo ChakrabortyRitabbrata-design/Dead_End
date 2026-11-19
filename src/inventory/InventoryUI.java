@@ -480,6 +480,9 @@ public class InventoryUI {
 
         java.util.List<String> lines = new java.util.ArrayList<>();
         lines.add(item.name);
+        if (item.rarity != null && !item.rarity.isEmpty()) {
+            lines.add("Rarity: " + item.rarity);
+        }
         lines.add(item.description);
         lines.add("Type: " + item.type.name());
 
@@ -502,18 +505,30 @@ public class InventoryUI {
         if (ty < 0)            ty = 0;
         if (ty + th > screenH) ty = screenH - th;
 
+        boolean isLegendary = "LEGENDARY".equalsIgnoreCase(item.rarity);
         g2.setColor(TOOLTIP_BG);
         g2.fillRoundRect(tx, ty, tw, th, 8, 8);
-        g2.setColor(BORDER);
+        g2.setColor(isLegendary ? new Color(200, 30, 45) : BORDER);
+        g2.setStroke(new BasicStroke(isLegendary ? 2.0f : 1.0f));
         g2.drawRoundRect(tx, ty, tw, th, 8, 8);
+        g2.setStroke(new BasicStroke(1.0f));
 
         int lineH = fm.getHeight();
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
-            if (i == 0)      g2.setColor(Color.WHITE);
-            else if (i == 2) g2.setColor(new Color(160, 200, 255));
-            else if (i >= 3) g2.setColor(new Color(255, 200, 120));
-            else             g2.setColor(TOOLTIP_FG);
+            if (i == 0) {
+                g2.setColor(isLegendary ? new Color(255, 120, 120) : Color.WHITE);
+            } else if (line.startsWith("Rarity: LEGENDARY")) {
+                g2.setColor(new Color(255, 65, 75));
+            } else if (line.startsWith("Rarity:")) {
+                g2.setColor(new Color(255, 215, 0));
+            } else if (line.startsWith("Type:")) {
+                g2.setColor(new Color(160, 200, 255));
+            } else if (line.startsWith("Damage:") || line.startsWith("Defense:")) {
+                g2.setColor(new Color(255, 200, 120));
+            } else {
+                g2.setColor(TOOLTIP_FG);
+            }
             g2.drawString(line, tx + 8, ty + lineH * (i + 1));
         }
     }

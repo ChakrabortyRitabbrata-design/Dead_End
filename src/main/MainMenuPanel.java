@@ -1,26 +1,21 @@
 package main;
 
+import db.SessionManager;
 import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.event.FocusEvent;
-import java.awt.event.FocusListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import javax.swing.JButton;
 import javax.swing.JPanel;
 
 /**
  * Clean, modern RPG Main Menu screen displayed upon launching the game.
- * Features a pure black background, stylized title typography, and two
- * interactive RPG-styled buttons: START GAME and EXIT.
+ * Features a pure black background, stylized title typography, and
+ * interactive RPG-styled buttons.
  */
 public class MainMenuPanel extends JPanel {
 
@@ -28,13 +23,23 @@ public class MainMenuPanel extends JPanel {
     public static final int PANEL_HEIGHT = 576;
 
     private final Runnable onStartGame;
+    private final Runnable onOpenLeaderboard;
+    private final Runnable onLogout;
     private final Runnable onExit;
 
     private final RpgButton startButton;
+    private final RpgButton leaderboardButton;
+    private final RpgButton logoutButton;
     private final RpgButton exitButton;
 
     public MainMenuPanel(Runnable onStartGame, Runnable onExit) {
+        this(onStartGame, null, null, onExit);
+    }
+
+    public MainMenuPanel(Runnable onStartGame, Runnable onOpenLeaderboard, Runnable onLogout, Runnable onExit) {
         this.onStartGame = onStartGame;
+        this.onOpenLeaderboard = onOpenLeaderboard;
+        this.onLogout = onLogout;
         this.onExit = onExit;
 
         setPreferredSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
@@ -43,38 +48,96 @@ public class MainMenuPanel extends JPanel {
         setFocusable(true);
 
         int buttonWidth = 240;
-        int buttonHeight = 46;
         int buttonX = (PANEL_WIDTH - buttonWidth) / 2;
 
-        startButton = new RpgButton("START GAME");
-        startButton.setBounds(buttonX, 310, buttonWidth, buttonHeight);
-        startButton.addActionListener(e -> startGame());
+        boolean fullMenu = (onOpenLeaderboard != null);
+        int buttonHeight = fullMenu ? 40 : 46;
 
-        exitButton = new RpgButton("EXIT");
-        exitButton.setBounds(buttonX, 376, buttonWidth, buttonHeight);
-        exitButton.addActionListener(e -> exitGame());
+        if (fullMenu) {
+            startButton = new RpgButton("START GAME");
+            startButton.setBounds(buttonX, 290, buttonWidth, buttonHeight);
+            startButton.addActionListener(e -> startGame());
 
-        // Keyboard navigation between buttons
-        KeyAdapter navKeyAdapter = new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                int code = e.getKeyCode();
-                if (code == KeyEvent.VK_UP || code == KeyEvent.VK_W) {
-                    startButton.requestFocusInWindow();
-                } else if (code == KeyEvent.VK_DOWN || code == KeyEvent.VK_S) {
-                    exitButton.requestFocusInWindow();
-                } else if (code == KeyEvent.VK_ESCAPE) {
-                    exitGame();
+            leaderboardButton = new RpgButton("LEADERBOARD");
+            leaderboardButton.setBounds(buttonX, 338, buttonWidth, buttonHeight);
+            leaderboardButton.addActionListener(e -> openLeaderboard());
+
+            logoutButton = new RpgButton("SWITCH USER");
+            logoutButton.setBounds(buttonX, 386, buttonWidth, buttonHeight);
+            logoutButton.addActionListener(e -> logout());
+
+            exitButton = new RpgButton("EXIT");
+            exitButton.setBounds(buttonX, 434, buttonWidth, buttonHeight);
+            exitButton.addActionListener(e -> exitGame());
+
+            // 4-button keyboard navigation
+            KeyAdapter navKeyAdapter = new KeyAdapter() {
+                @Override
+                public void keyPressed(KeyEvent e) {
+                    int code = e.getKeyCode();
+                    if (code == KeyEvent.VK_UP || code == KeyEvent.VK_W) {
+                        if (exitButton.isFocusOwner()) logoutButton.requestFocusInWindow();
+                        else if (logoutButton.isFocusOwner()) leaderboardButton.requestFocusInWindow();
+                        else if (leaderboardButton.isFocusOwner()) startButton.requestFocusInWindow();
+                        else exitButton.requestFocusInWindow();
+                    } else if (code == KeyEvent.VK_DOWN || code == KeyEvent.VK_S) {
+                        if (startButton.isFocusOwner()) leaderboardButton.requestFocusInWindow();
+                        else if (leaderboardButton.isFocusOwner()) logoutButton.requestFocusInWindow();
+                        else if (logoutButton.isFocusOwner()) exitButton.requestFocusInWindow();
+                        else startButton.requestFocusInWindow();
+                    } else if (code == KeyEvent.VK_ESCAPE) {
+                        exitGame();
+                    }
                 }
-            }
-        };
+            };
 
-        startButton.addKeyListener(navKeyAdapter);
-        exitButton.addKeyListener(navKeyAdapter);
-        this.addKeyListener(navKeyAdapter);
+            startButton.addKeyListener(navKeyAdapter);
+            leaderboardButton.addKeyListener(navKeyAdapter);
+            logoutButton.addKeyListener(navKeyAdapter);
+            exitButton.addKeyListener(navKeyAdapter);
+            this.addKeyListener(navKeyAdapter);
 
-        add(startButton);
-        add(exitButton);
+            add(startButton);
+            add(leaderboardButton);
+            add(logoutButton);
+            add(exitButton);
+        } else {
+            leaderboardButton = null;
+            logoutButton = null;
+
+            startButton = new RpgButton("START GAME");
+            startButton.setBounds(buttonX, 310, buttonWidth, buttonHeight);
+            startButton.addActionListener(e -> startGame());
+
+            exitButton = new RpgButton("EXIT");
+            exitButton.setBounds(buttonX, 376, buttonWidth, buttonHeight);
+            exitButton.addActionListener(e -> exitGame());
+
+            KeyAdapter navKeyAdapter = new KeyAdapter() {
+                @Override
+                public void keyPressed(KeyEvent e) {
+                    int code = e.getKeyCode();
+                    if (code == KeyEvent.VK_UP || code == KeyEvent.VK_W) {
+                        startButton.requestFocusInWindow();
+                    } else if (code == KeyEvent.VK_DOWN || code == KeyEvent.VK_S) {
+                        exitButton.requestFocusInWindow();
+                    } else if (code == KeyEvent.VK_ESCAPE) {
+                        exitGame();
+                    }
+                }
+            };
+
+            startButton.addKeyListener(navKeyAdapter);
+            exitButton.addKeyListener(navKeyAdapter);
+            this.addKeyListener(navKeyAdapter);
+
+            add(startButton);
+            add(exitButton);
+        }
+    }
+
+    public void focusStartButton() {
+        startButton.requestFocusInWindow();
     }
 
     @Override
@@ -84,15 +147,19 @@ public class MainMenuPanel extends JPanel {
     }
 
     private void startGame() {
-        if (onStartGame != null) {
-            onStartGame.run();
-        }
+        if (onStartGame != null) onStartGame.run();
+    }
+
+    private void openLeaderboard() {
+        if (onOpenLeaderboard != null) onOpenLeaderboard.run();
+    }
+
+    private void logout() {
+        if (onLogout != null) onLogout.run();
     }
 
     private void exitGame() {
-        if (onExit != null) {
-            onExit.run();
-        }
+        if (onExit != null) onExit.run();
     }
 
     @Override
@@ -116,7 +183,7 @@ public class MainMenuPanel extends JPanel {
         FontMetrics tfm = g2.getFontMetrics();
         int titleWidth = tfm.stringWidth(title);
         int titleX = centerX - titleWidth / 2;
-        int titleY = 190;
+        int titleY = 175;
 
         // Subtle soft drop shadow
         g2.setColor(new Color(30, 30, 35));
@@ -128,7 +195,7 @@ public class MainMenuPanel extends JPanel {
 
         // --- Divider Line & RPG Accents ---
         int lineWidth = 280;
-        int lineY = 224;
+        int lineY = 205;
         g2.setColor(new Color(75, 75, 82));
         g2.drawLine(centerX - lineWidth / 2, lineY, centerX + lineWidth / 2, lineY);
 
@@ -145,7 +212,16 @@ public class MainMenuPanel extends JPanel {
         FontMetrics sfm = g2.getFontMetrics();
         int subWidth = sfm.stringWidth(subtitle);
         g2.setColor(new Color(130, 130, 140));
-        g2.drawString(subtitle, centerX - subWidth / 2, 248);
+        g2.drawString(subtitle, centerX - subWidth / 2, 228);
+
+        // --- User status indicator ---
+        String userBanner = SessionManager.isLoggedIn()
+                ? "PLAYER: " + SessionManager.getUsername().toUpperCase()
+                : "PLAYING AS GUEST";
+        g2.setFont(new Font("Georgia", Font.BOLD, 11));
+        g2.setColor(SessionManager.isLoggedIn() ? new Color(205, 185, 130) : new Color(135, 140, 150));
+        FontMetrics ufm = g2.getFontMetrics();
+        g2.drawString(userBanner, centerX - ufm.stringWidth(userBanner) / 2, 254);
 
         // --- Subtle Bottom Hints ---
         String footerHint = "SELECT WITH MOUSE OR ARROW KEYS  |  PRESS ENTER";

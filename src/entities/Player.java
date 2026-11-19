@@ -58,6 +58,8 @@ public class Player extends Entity {
     private final AnimationController animationController = new AnimationController();
     private final Animation[][] animations =
             new Animation[Direction.values().length][AnimationState.values().length];
+    private final Animation[][] executionerAnimations =
+            new Animation[Direction.values().length][AnimationState.values().length];
 
     public int screenX;
     public int screenY;
@@ -132,6 +134,7 @@ public class Player extends Entity {
             loadDeathAnimations(readImage(
                     "player/Pixel Hero Four-Direction Death Animation.png"));
             loadFallbackAnimationsFromWalking();
+            loadExecutionerAnimations();
             selectAnimation();
         } catch (IOException | RuntimeException e) {
             throw new IllegalStateException("Unable to load original player animations.", e);
@@ -260,11 +263,78 @@ public class Player extends Entity {
         }
     }
 
+    private void loadExecutionerAnimations() {
+        BufferedImage moveSheet = null;
+        try {
+            moveSheet = readImage("ExecutionerSword/movement.png");
+        } catch (Exception e) {
+            try {
+                moveSheet = readImage("res/ExecutionerSword/movement.png");
+            } catch (Exception ex) {
+                System.err.println("Warning: Unable to load Executioner Sword movement sheet: " + ex.getMessage());
+            }
+        }
+        if (moveSheet == null) return;
+
+        for (Direction dir : Direction.values()) {
+            int dirOrd = dir.ordinal();
+
+            // 1. IDLE (Row 0, 4 frames)
+            AnimationFrame[] idleFrames = new AnimationFrame[4];
+            for (int f = 0; f < 4; f++) {
+                Rectangle b = SpriteSheetMapping.executionerIdleBounds(dir, f);
+                BufferedImage sub = moveSheet.getSubimage(b.x, b.y, b.width, b.height);
+                idleFrames[f] = new AnimationFrame(normalizeFrame(sub), IDLE_FRAME);
+            }
+            executionerAnimations[dirOrd][AnimationState.IDLE.ordinal()] = new Animation(idleFrames, true);
+
+            // 2. WALK (Row 1, 4 frames)
+            AnimationFrame[] walkFrames = new AnimationFrame[4];
+            for (int f = 0; f < 4; f++) {
+                Rectangle b = SpriteSheetMapping.executionerWalkingBounds(dir, f);
+                BufferedImage sub = moveSheet.getSubimage(b.x, b.y, b.width, b.height);
+                walkFrames[f] = new AnimationFrame(normalizeFrame(sub), WALK_FRAME);
+            }
+            executionerAnimations[dirOrd][AnimationState.WALK.ordinal()] = new Animation(walkFrames, true);
+            executionerAnimations[dirOrd][AnimationState.RUN.ordinal()] = new Animation(walkFrames, true);
+
+            // 3. ATTACK / PUNCH / KICK (Row 3, 4 frames with crimson slash)
+            AnimationFrame[] attackFrames = new AnimationFrame[4];
+            for (int f = 0; f < 4; f++) {
+                Rectangle b = SpriteSheetMapping.executionerAttackBounds(dir, f);
+                BufferedImage sub = moveSheet.getSubimage(b.x, b.y, b.width, b.height);
+                attackFrames[f] = new AnimationFrame(normalizeFrame(sub), PUNCH_FRAME);
+            }
+            executionerAnimations[dirOrd][AnimationState.PUNCH.ordinal()] = new Animation(attackFrames, false);
+            executionerAnimations[dirOrd][AnimationState.KICK.ordinal()] = new Animation(attackFrames, false);
+
+            // 4. ACTION / DODGE / ROLL (Row 2, 4 frames)
+            AnimationFrame[] actionFrames = new AnimationFrame[4];
+            for (int f = 0; f < 4; f++) {
+                Rectangle b = SpriteSheetMapping.executionerActionBounds(dir, f);
+                BufferedImage sub = moveSheet.getSubimage(b.x, b.y, b.width, b.height);
+                actionFrames[f] = new AnimationFrame(normalizeFrame(sub), DODGE_FRAME);
+            }
+            executionerAnimations[dirOrd][AnimationState.DODGE.ordinal()] = new Animation(actionFrames, false);
+            executionerAnimations[dirOrd][AnimationState.ROLL.ordinal()] = new Animation(actionFrames, false);
+
+            // Fallback for HURT and DIE
+            for (AnimationState st : AnimationState.values()) {
+                if (executionerAnimations[dirOrd][st.ordinal()] == null) {
+                    executionerAnimations[dirOrd][st.ordinal()] = animations[dirOrd][st.ordinal()];
+                }
+            }
+        }
+    }
+
     private BufferedImage readImage(String resourcePath) throws IOException {
         try (InputStream stream = openResource(resourcePath)) {
             BufferedImage image = ImageIO.read(stream);
             if (image == null) {
                 throw new IOException("Resource is not a readable image: " + resourcePath);
+            }
+            if (image.getColorModel().hasAlpha()) {
+                return image;
             }
             return makeTransparent(image);
         }
@@ -355,6 +425,17 @@ public class Player extends Entity {
             }
         }
         return null;
+    }
+
+    public boolean isExecutionerSwordEquipped() {
+        Weapon w = getEquippedWeapon();
+        return w != null && (w instanceof inventory.ExecutionerSword
+                || "executioner_sword".equalsIgnoreCase(w.id)
+                || "EXECUTIONER SWORD".equalsIgnoreCase(w.name));
+    }
+
+    public boolean canSprint() {
+        return keyH.runPressed && !isExecutionerSwordEquipped();
     }
 
     public WeaponRenderer getWeaponRenderer() {
@@ -476,7 +557,7 @@ public class Player extends Entity {
         if (hasMovementInput()) {
             facing = inputDirection();
             direction = directionName(facing);
-            setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
+            setState(canSprint() ? AnimationState.RUN : AnimationState.WALK);
         } else {
             setState(AnimationState.IDLE);
         }
@@ -498,7 +579,7 @@ public class Player extends Entity {
                 if (hasMovementInput()) {
                     facing = inputDirection();
                     direction = directionName(facing);
-                    setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
+                    setState(canSprint() ? AnimationState.RUN : AnimationState.WALK);
                 } else {
                     setState(AnimationState.IDLE);
                 }
@@ -552,9 +633,9 @@ public class Player extends Entity {
         if (moving) {
             facing = input;
             direction = directionName(facing);
-            speed = swimming ? (keyH.runPressed ? 4 : 3) : (keyH.runPressed ? 6 : 4);
+            speed = swimming ? (canSprint() ? 4 : 3) : (canSprint() ? 6 : 4);
             moveWithCollision(speed);
-            setState(keyH.runPressed ? AnimationState.RUN : AnimationState.WALK);
+            setState(canSprint() ? AnimationState.RUN : AnimationState.WALK);
         } else {
             speed = 4;
             setState(AnimationState.IDLE);
@@ -609,7 +690,7 @@ public class Player extends Entity {
         return keyH.upPressed || keyH.downPressed || keyH.leftPressed || keyH.rightPressed;
     }
 
-    private void setState(AnimationState nextState) {
+    public void setState(AnimationState nextState) {
         Direction nextDirection = isActionState(nextState) ? actionDirection : facing;
         if (state == nextState
                 && animationController.getDirection() == nextDirection) {
@@ -620,10 +701,30 @@ public class Player extends Entity {
         selectAnimation();
     }
 
+    public void setFacing(Direction dir) {
+        this.facing = dir;
+        this.actionDirection = dir;
+        this.direction = directionName(dir);
+        selectAnimation();
+    }
+
+    public BufferedImage getActiveFrameImage() {
+        if (animationController != null && animationController.getCurrentFrame() != null) {
+            return animationController.getCurrentFrame().getImage();
+        }
+        return getDirectionalIdleFrame(facing);
+    }
+
     private void selectAnimation() {
         Direction animationDirection = isActionLocked() ? actionDirection : facing;
-        animationController.setAnimation(state, animationDirection,
-                animations[animationDirection.ordinal()][state.ordinal()]);
+        Animation anim = null;
+        if (isExecutionerSwordEquipped()) {
+            anim = executionerAnimations[animationDirection.ordinal()][state.ordinal()];
+        }
+        if (anim == null) {
+            anim = animations[animationDirection.ordinal()][state.ordinal()];
+        }
+        animationController.setAnimation(state, animationDirection, anim);
     }
 
     private boolean isActionState(AnimationState animationState) {
@@ -665,6 +766,9 @@ public class Player extends Entity {
     }
 
     public int getAttackDamage() {
+        if (isExecutionerSwordEquipped()) {
+            return 150;
+        }
         Weapon equipped = getEquippedWeapon();
         if (equipped != null && weaponRenderer != null && weaponRenderer.isAttacking()) {
             return equipped.damage;
